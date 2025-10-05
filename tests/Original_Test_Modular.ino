@@ -1,8 +1,9 @@
 /*
- * @Description: Qurospad
- * @Author: kosamit
- * @Date: 2025-10-05 09:34:58
- * @LastEditTime: 2025-10-05 09:35:15
+ * @Description: Original_Test - Modular Version
+ * @Author: LILYGO_L
+ * @Date: 2023-09-06 10:58:19
+ * @LastEditTime: 2025-02-06 10:42:42
+ * @License: GPL 3.0
  */
 
 #include "common/common_config.h"

@@ -101,35 +101,35 @@ void Wifi_STA_Test(void)
 
 void WIFI_HTTP_Download_SD_File(void)
 {
-    // 初始化HTTP客户端
+    // HTTPクライアントを初期化
     HTTPClient http;
     http.begin(fileDownloadUrl);
-    // 获取重定向的URL
+    // リダイレクトURLを取得
     const char *headerKeys[] = {"Location"};
     http.collectHeaders(headerKeys, 1);
 
-    // 记录下载开始时间
+    // ダウンロード開始時間を記録
     size_t startTime = millis();
-    // 无用时间
+    // 無効時間
     size_t uselessTime = 0;
 
-    // 发起GET请求
+    // GETリクエストを送信
     int httpCode = http.GET();
 
     while (httpCode == HTTP_CODE_MOVED_PERMANENTLY || httpCode == HTTP_CODE_FOUND)
     {
         String newUrl = http.header("Location");
         Serial.printf("Redirecting to: %s\n", newUrl.c_str());
-        http.end(); // 关闭旧的HTTP连接
+        http.end(); // 古いHTTP接続を閉じる
 
-        // 使用新的URL重新发起GET请求
+        // 新しいURLを使用してGETリクエストを再送信
         http.begin(newUrl);
         httpCode = http.GET();
     }
 
     if (httpCode == HTTP_CODE_OK)
     {
-        // 获取文件大小
+        // ファイルサイズを取得
         size_t fileSize = http.getSize();
         Serial.printf("Starting file download...\n");
         Serial.printf("file size: %f MB\n", fileSize / 1024.0 / 1024.0);
@@ -139,22 +139,22 @@ void WIFI_HTTP_Download_SD_File(void)
         SD.remove(SD_FILE_NAME_TEMP);
 
         File file;
-        // 打开文件，如果没有文件就创建文件
+        // ファイルを開く、ファイルがない場合は作成
         file = SD.open(SD_FILE_NAME_TEMP, FILE_WRITE);
 
         if (file != 0)
         {
-            // 读取HTTP响应
+            // HTTPレスポンスを読み取り
             WiFiClient *stream = http.getStreamPtr();
 
             size_t temp_count_s = 0;
             size_t temp_fileSize = fileSize;
             // uint8_t *buf_1 = (uint8_t *)heap_caps_malloc(64 * 1024, MALLOC_CAP_SPIRAM);
             uint8_t buf_1[4096] = {0};
-            CycleTime = millis() + 3000; // 开始计时
+            CycleTime = millis() + 3000; // タイマー開始
             while (http.connected() && (temp_fileSize > 0 || temp_fileSize == -1))
             {
-                // 获取可用数据的大小
+                // 利用可能なデータのサイズを取得
                 size_t availableSize = stream->available();
                 if (availableSize)
                 {
@@ -192,10 +192,10 @@ void WIFI_HTTP_Download_SD_File(void)
                 // delay(1);
             }
 
-            // 关闭HTTP客户端
+            // HTTPクライアントを閉じる
             http.end();
 
-            // 记录下载结束时间并计算总花费时间
+            // ダウンロード終了時間を記録し、総所要時間を計算
             size_t endTime = millis();
 
             file.close();
@@ -304,8 +304,8 @@ bool WiFi_Test_Loop()
 
         if (Wifi_Connection_Flag == true)
         {
-            // Obtain and set the time from the network time server
-            // After successful acquisition, the chip will use the RTC clock to update the holding time
+            // ネットワークタイムサーバーから時間を取得して設定
+            // 取得成功後、チップはRTCクロックを使用して保持時間を更新
             configTime(GMT_OFFSET_SEC, DAY_LIGHT_OFFSET_SEC, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
             PrintLocalTime();
 

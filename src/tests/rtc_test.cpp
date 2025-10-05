@@ -98,29 +98,29 @@ bool RTC_Test_Loop()
                 if (touch_x > (LCD_WIDTH / 4) && touch_x < (LCD_WIDTH / 4 + LCD_WIDTH / 2) &&
                     touch_y > (LCD_HEIGHT - (LCD_HEIGHT / 3) - 30) && touch_y < (LCD_HEIGHT - (LCD_HEIGHT / 3) - 30 + 50))
                 {
-                    // 重置时间
-                    //  关闭RTC
+                    // 時間をリセット
+                    //  RTCを無効化
                     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                                      PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_OFF);
-                    // 时钟传感器设置秒
+                    // クロックセンサーで秒を設定
                     PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_SECOND_DATA,
                                                      58);
-                    // 时钟传感器设置分
+                    // クロックセンサーで分を設定
                     PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_MINUTE_DATA,
                                                      59);
-                    // 时钟传感器设置时
+                    // クロックセンサーで時を設定
                     PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_HOUR_DATA,
                                                      23);
-                    // 时钟传感器设置天
+                    // クロックセンサーで日を設定
                     PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_DAY_DATA,
                                                      31);
-                    // 时钟传感器设置月
+                    // クロックセンサーで月を設定
                     PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_MONTH_DATA,
                                                      12);
-                    // 时钟传感器设置
+                    // クロックセンサーで年を設定
                     PCF85063->IIC_Write_Device_Value(PCF85063->Arduino_IIC_RTC::Device_Value::RTC_SET_YEAR_DATA,
                                                      99);
-                    // 开启RTC
+                    // RTCを有効化
                     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                                      PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
 

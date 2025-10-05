@@ -113,7 +113,7 @@ void Music_Test_Display()
             gfx->print(".");
 
             Music_Start_Playing_Count++;
-            if (Music_Start_Playing_Count > 10) // 10秒超时
+            if (Music_Start_Playing_Count > 10) // 10秒タイムアウト
             {
                 Music_Start_Playing_Flag = false;
                 break;
@@ -130,7 +130,7 @@ void Music_Test_Display()
             if (millis() > CycleTime)
             {
                 Music_Start_Playing_Count++;
-                if (Music_Start_Playing_Count > 10) // 10秒后下载超时
+                if (Music_Start_Playing_Count > 10) // 10秒後にダウンロードタイムアウト
                 {
                     Music_Start_Playing_Flag = false;
                     break;

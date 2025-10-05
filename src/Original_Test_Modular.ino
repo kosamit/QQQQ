@@ -133,7 +133,7 @@ void setup()
         Serial.println("SY6970 initialization successfully");
     }
 
-    // 开启ADC测量功能
+    // ADC測定機能を有効化
     if (SY6970->IIC_Write_Device_State(SY6970->Arduino_IIC_Power::Device::POWER_DEVICE_ADC_MEASURE,
                                        SY6970->Arduino_IIC_Power::Device_State::POWER_DEVICE_ON) == false)
     {
@@ -145,25 +145,25 @@ void setup()
         Serial.println("SY6970 ADC Measure ON successfully");
     }
 
-    // 禁用看门狗定时器喂狗功能
+    // ウォッチドッグタイマーのフィード機能を無効化
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_WATCHDOG_TIMER, 0);
-    // 热调节阈值设置为60度
+    // 熱調節しきい値を60度に設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_THERMAL_REGULATION_THRESHOLD, 60);
-    // 充电目标电压电压设置为4224mV
+    // 充電目標電圧を4224mVに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_CHARGING_TARGET_VOLTAGE_LIMIT, 4224);
-    // 最小系统电压限制为3600mA
+    // 最小システム電圧制限を3600mVに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_MINIMUM_SYSTEM_VOLTAGE_LIMIT, 3600);
-    // 设置OTG电压为5062mV
+    // OTG電圧を5062mVに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_OTG_VOLTAGE_LIMIT, 5062);
-    // 输入电流限制设置为2100mA
+    // 入力電流制限を2100mAに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_INPUT_CURRENT_LIMIT, 2100);
-    // 快速充电电流限制设置为2112mA
+    // 高速充電電流制限を2112mAに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_FAST_CHARGING_CURRENT_LIMIT, 2112);
-    // 预充电电流限制设置为192mA
+    // プリ充電電流制限を192mAに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_PRECHARGE_CHARGING_CURRENT_LIMIT, 192);
-    // 终端充电电流限制设置为320mA
+    // 終端充電電流制限を320mAに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_TERMINATION_CHARGING_CURRENT_LIMIT, 320);
-    // OTG电流限制设置为500mA
+    // OTG電流制限を500mAに設定
     SY6970->IIC_Write_Device_Value(SY6970->Arduino_IIC_Power::Device_Value::POWER_DEVICE_OTG_CHARGING_LIMIT, 500);
 
     if (CST226SE->begin() == false)
@@ -176,7 +176,7 @@ void setup()
         Serial.println("CST226SE initialization successfully");
     }
 
-    // 目前休眠功能只能进入不能退出 要退出只能系统重置
+    // 現在、スリープ機能は入ることのみ可能で、出ることはできません。退出するにはシステムリセットが必要です
     // CST226SE->IIC_Write_Device_State(CST226SE->Arduino_IIC_Touch::Device::TOUCH_DEVICE_SLEEP_MODE,
     //                                 CST226SE->Arduino_IIC_Touch::Device_State::TOUCH_DEVICE_ON);
 
@@ -190,20 +190,20 @@ void setup()
         Serial.println("PCF85063 initialization successfully");
     }
 
-    // 设置时间格式为24小时制
+    // 時間形式を24時間制に設定
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_TIME_FORMAT,
                                      PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_TIME_FORMAT_24);
 
-    // 关闭时钟输出
+    // クロック出力を無効化
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_OUTPUT_VALUE,
                                      PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_OUTPUT_OFF);
 
-    // 开启RTC
+    // RTCを有効化
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                      PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
 
     Volume_Value = 3;
-    audio.setVolume(Volume_Value); // 0...21,Volume setting
+    audio.setVolume(Volume_Value); // 0...21、音量設定
 
     gfx->begin();
     gfx->fillScreen(WHITE);

@@ -8,6 +8,7 @@
 #include "common/common_config.h"
 #include "common/common_functions.h"
 #include "debug/touch_info.h"
+#include "lib/grid.h"
 
 // File Download URL Definition
 const char *fileDownloadUrl = "https://freetyst.nf.migu.cn/public/product9th/product45/2022/05/0716/2018%E5%B9%B409%E6%9C%8812%E6%97%A510%E7%82%B943%E5%88%86%E7%B4%A7%E6%80%A5%E5%86%85%E5%AE%B9%E5%87%86%E5%85%A5%E5%8D%8E%E7%BA%B3179%E9%A6%96/%E6%A0%87%E6%B8%85%E9%AB%98%E6%B8%85/MP3_128_16_Stero/6005751EPFG164228.mp3?channelid=02&msisdn=d43a7dcc-8498-461b-ba22-3205e9b6aa82&Tim=1728484238063&Key=0442fa065dacda7c";
@@ -56,6 +57,9 @@ std::unique_ptr<Arduino_IIC> SY6970(new Arduino_SY6970(IIC_Bus, SY6970_DEVICE_AD
 
 std::unique_ptr<Arduino_IIC> PCF85063(new Arduino_PCF85063(IIC_Bus, PCF85063_DEVICE_ADDRESS,
                                                            DRIVEBUS_DEFAULT_VALUE, PCF85063_INT, Arduino_IIC_RTC_Interrupt));
+
+// グリッドオブジェクト
+Grid4x4* grid;
 
 void Arduino_IIC_Touch_Interrupt(void)
 {
@@ -204,6 +208,22 @@ void setup()
     
     // Initialize touch info
     Init_Touch_Info();
+    
+    // グリッドを作成（画面中央に配置）
+    grid = new Grid4x4(gfx);
+    grid->init(50, 50, 60, 60);  // x=50, y=50から開始、セルサイズ60x60
+    
+    // グリッドの設定
+    grid->setLineThickness(2);
+    grid->setGridLineColor(0xFFFF);      // 白い線
+    grid->setActiveColor(0x07E0);        // 緑色（アクティブ時）
+    grid->setInactiveColor(0x0000);      // 黒色（非アクティブ時）
+    grid->setTouchMode(TOUCH_MODE_TOGGLE); // タッチで切り替えモード
+    
+    // グリッドを描画
+    grid->draw();
+    
+    Serial.println("4x4 Grid initialized");
 }
 
 void loop()
@@ -221,6 +241,29 @@ void loop()
     // タッチするたびの更新処理
     if (global_touch_info.has_changed) {
         // タッチ情報を表示
-        Print_Touch_Info();
+        // Print_Touch_Info();
+        
+        // グリッドでタッチを処理
+        if (global_touch_info.fingers_number > 0) {
+            int16_t touchX = global_touch_info.touch_x[0];
+            int16_t touchY = global_touch_info.touch_y[0];
+            bool isPressed = global_touch_info.is_touched;
+            
+            if (grid->handleTouch(touchX, touchY, isPressed)) {
+                // タッチがグリッド内で処理された
+                Serial.println("Grid touched!");
+                
+                // アクティブなセルの数を表示
+                int16_t activeCount = grid->getActiveCellCount();
+                Serial.print("Active cells: ");
+                Serial.println(activeCount);
+                
+                // グリッドを再描画
+                grid->redraw();
+            }
+        }
     }
+
+    // 4x4のパッドを表示
+    
 }

@@ -7,6 +7,7 @@
 
 #include "common/common_config.h"
 #include "common/common_functions.h"
+#include "debug/touch_info.h"
 
 // File Download URL Definition
 const char *fileDownloadUrl = "https://freetyst.nf.migu.cn/public/product9th/product45/2022/05/0716/2018%E5%B9%B409%E6%9C%8812%E6%97%A510%E7%82%B943%E5%88%86%E7%B4%A7%E6%80%A5%E5%86%85%E5%AE%B9%E5%87%86%E5%85%A5%E5%8D%8E%E7%BA%B3179%E9%A6%96/%E6%A0%87%E6%B8%85%E9%AB%98%E6%B8%85/MP3_128_16_Stero/6005751EPFG164228.mp3?channelid=02&msisdn=d43a7dcc-8498-461b-ba22-3205e9b6aa82&Tim=1728484238063&Key=0442fa065dacda7c";
@@ -200,41 +201,26 @@ void setup()
     gfx->begin();
     gfx->setTextSize(1);
     gfx->fillScreen(WHITE);
+    
+    // Initialize touch info
+    Init_Touch_Info();
 }
 
 void loop()
 {
+    // 時計表示
     if (millis() > CycleTime)
     {
         GFX_Print_Time_Info_Loop();
         CycleTime = millis() + 1000;
     }
 
-    if (CST226SE->IIC_Interrupt_Flag == true)
-    {
-        CST226SE->IIC_Interrupt_Flag = false;
-
-        uint8_t fingers_number = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_FINGER_NUMBER);
-
-        if (fingers_number > 0)
-        {
-            Vibration_Start();
-
-            int32_t touch_x = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_X);
-            int32_t touch_y = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_Y);
-            Serial.printf("[1] point x: %d  point y: %d \r\n", touch_x, touch_y);
-
-            // 画面をクリア
-            gfx->fillScreen(WHITE);
-            
-            // 上部に座標を表示
-            gfx->setCursor(10, 10);
-            gfx->setTextColor(BLACK);
-            gfx->printf("X: %d  Y: %d", touch_x, touch_y);
-            
-            // タッチされた場所に円を表示
-            gfx->fillCircle(touch_x, touch_y, 20, RED);
-            gfx->drawCircle(touch_x, touch_y, 20, BLACK);
-        }
+    // タッチ情報を更新
+    Update_Touch_Info();
+    
+    // タッチするたびの更新処理
+    if (global_touch_info.has_changed) {
+        // タッチ情報を表示
+        Print_Touch_Info();
     }
 }

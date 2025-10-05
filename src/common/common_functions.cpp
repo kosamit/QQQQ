@@ -10,7 +10,7 @@
 void Vibration_Start(void)
 {
     ledcWrite(2, 255);
-    delay(150);
+    delay(10);
     ledcWrite(2, 0);
 }
 
@@ -125,7 +125,9 @@ void GFX_Print_START()
 
 void GFX_Print_Time_Info_Loop()
 {
-    gfx->fillRoundRect(35, 35, 152, 95, 10, WHITE);
+    // 右上の時間表示エリアをクリア（小さな矩形）
+    gfx->fillRect(LCD_WIDTH - 80, 10, 70, 20, WHITE);
+    gfx->drawRect(LCD_WIDTH - 80, 10, 70, 20, BLACK);
 
     if (Wifi_Connection_Flag == true)
     {
@@ -133,43 +135,29 @@ void GFX_Print_Time_Info_Loop()
         if (!getLocalTime(&timeinfo, 1000))
         {
             Serial.println("Failed to obtain time");
-            gfx->setCursor(50, 45);
+            gfx->setCursor(LCD_WIDTH - 75, 15);
             gfx->setTextColor(RED);
             gfx->setTextSize(1);
-            gfx->print("Time error");
+            gfx->print("Error");
             return;
         }
-        Serial.println("Get time success");
-        Serial.println(&timeinfo, "%A,%B %d %Y %H:%M:%S"); // Format Output
-        gfx->setCursor(50, 45);
-        gfx->setTextColor(ORANGE);
+        // hh:mm:ss形式で右上に表示
+        gfx->setCursor(LCD_WIDTH - 75, 15);
+        gfx->setTextColor(BLACK);
         gfx->setTextSize(1);
-        gfx->print(&timeinfo, " %Y");
-        gfx->setCursor(50, 60);
-        gfx->print(&timeinfo, "%B %d");
-        gfx->setCursor(50, 75);
         gfx->print(&timeinfo, "%H:%M:%S");
     }
     else
     {
         // WiFi接続がない場合はRTC時刻を使用
-        uint8_t year = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_YEARS_DATA);
-        uint8_t month = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_MONTHS_DATA);
-        uint8_t day = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_DAYS_DATA);
         uint8_t hour = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_HOURS_DATA);
         uint8_t minute = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_MINUTES_DATA);
         uint8_t second = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_SECONDS_DATA);
         
-        gfx->setCursor(50, 45);
-        gfx->setTextColor(GREEN);
+        // hh:mm:ss形式で右上に表示
+        gfx->setCursor(LCD_WIDTH - 75, 15);
+        gfx->setTextColor(BLACK);
         gfx->setTextSize(1);
-        gfx->printf("20%02d", year);
-        gfx->setCursor(50, 60);
-        gfx->printf("%02d/%02d", month, day);
-        gfx->setCursor(50, 75);
         gfx->printf("%02d:%02d:%02d", hour, minute, second);
     }
-
-    gfx->setCursor(50, 90);
-    gfx->printf("SYS Time:%d", (uint32_t)millis() / 1000);
 }

@@ -152,10 +152,22 @@ void GFX_Print_Time_Info_Loop()
     }
     else
     {
+        // WiFi接続がない場合はRTC時刻を使用
+        uint8_t year = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_YEARS_DATA);
+        uint8_t month = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_MONTHS_DATA);
+        uint8_t day = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_DAYS_DATA);
+        uint8_t hour = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_HOURS_DATA);
+        uint8_t minute = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_MINUTES_DATA);
+        uint8_t second = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_SECONDS_DATA);
+        
         gfx->setCursor(50, 45);
-        gfx->setTextSize(2);
-        gfx->setTextColor(RED);
-        gfx->print("Network error");
+        gfx->setTextColor(GREEN);
+        gfx->setTextSize(1);
+        gfx->printf("20%02d", year);
+        gfx->setCursor(50, 60);
+        gfx->printf("%02d/%02d", month, day);
+        gfx->setCursor(50, 75);
+        gfx->printf("%02d:%02d:%02d", hour, minute, second);
     }
 
     gfx->setCursor(50, 90);

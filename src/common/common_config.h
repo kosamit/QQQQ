@@ -33,6 +33,7 @@
 #define WIFI_SSID "xinyuandianzi"
 #define WIFI_PASSWORD "AA15994823428"
 #define WIFI_CONNECT_WAIT_MAX (10000)
+#define ENABLE_WIFI_CONNECTION false  // WiFi接続を無効化する場合はtrueに変更
 
 // NTP Configuration
 #define NTP_SERVER1 "pool.ntp.org"

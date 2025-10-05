@@ -7,14 +7,6 @@
 
 #include "common/common_config.h"
 #include "common/common_functions.h"
-#include "tests/touch_test.h"
-#include "tests/vibration_test.h"
-#include "tests/rtc_test.h"
-#include "tests/microphone_test.h"
-#include "tests/sd_test.h"
-#include "tests/wifi_test.h"
-#include "tests/music_test.h"
-#include "assets/Material_16Bit_222x480px.h"
 
 // File Download URL Definition
 const char *fileDownloadUrl = "https://freetyst.nf.migu.cn/public/product9th/product45/2022/05/0716/2018%E5%B9%B409%E6%9C%8812%E6%97%A510%E7%82%B943%E5%88%86%E7%B4%A7%E6%80%A5%E5%86%85%E5%AE%B9%E5%87%86%E5%85%A5%E5%8D%8E%E7%BA%B3179%E9%A6%96/%E6%A0%87%E6%B8%85%E9%AB%98%E6%B8%85/MP3_128_16_Stero/6005751EPFG164228.mp3?channelid=02&msisdn=d43a7dcc-8498-461b-ba22-3205e9b6aa82&Tim=1728484238063&Key=0442fa065dacda7c";
@@ -72,30 +64,6 @@ void Arduino_IIC_Touch_Interrupt(void)
 void Arduino_IIC_RTC_Interrupt(void)
 {
     PCF85063->IIC_Interrupt_Flag = true;
-}
-
-void Original_Test_Loop()
-{
-    // Touch Test
-    Touch_Test_Loop();
-
-    // Vibration Motor Test
-    Vibration_Test_Loop();
-
-    // RTC Test
-    RTC_Test_Loop();
-
-    // Microphone Test
-    Microphone_Test_Loop();
-
-    // SD Card Test
-    SD_Test_Loop_Main();
-
-    // WiFi Test
-    WiFi_Test_Loop();
-
-    // Music Test
-    Music_Test_Loop();
 }
 
 void setup()
@@ -175,10 +143,6 @@ void setup()
         Serial.println("CST226SE initialization successfully");
     }
 
-    // 現在、スリープ機能は入ることのみ可能で、出ることはできません。退出するにはシステムリセットが必要です
-    // CST226SE->IIC_Write_Device_State(CST226SE->Arduino_IIC_Touch::Device::TOUCH_DEVICE_SLEEP_MODE,
-    //                                 CST226SE->Arduino_IIC_Touch::Device_State::TOUCH_DEVICE_ON);
-
     if (PCF85063->begin() == false)
     {
         Serial.println("PCF85063 initialization fail");
@@ -204,13 +168,38 @@ void setup()
     Volume_Value = 3;
     audio.setVolume(Volume_Value); // 0...21、音量設定
 
+    // WiFi接続を開始（設定で有効化されている場合のみ）
+    if (ENABLE_WIFI_CONNECTION) {
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        Serial.print("WiFi接続中");
+        unsigned long wifi_start_time = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - wifi_start_time < WIFI_CONNECT_WAIT_MAX) {
+            delay(500);
+            Serial.print(".");
+        }
+        
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println();
+            Serial.println("WiFi接続成功");
+            Serial.print("IPアドレス: ");
+            Serial.println(WiFi.localIP());
+            
+            // NTP時間同期設定
+            configTime(GMT_OFFSET_SEC, DAY_LIGHT_OFFSET_SEC, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+            Wifi_Connection_Flag = true;
+        } else {
+            Serial.println();
+            Serial.println("WiFi接続失敗");
+            Wifi_Connection_Flag = false;
+        }
+    } else {
+        Serial.println("WiFi接続は無効化されています - RTC時刻を使用します");
+        Wifi_Connection_Flag = false;
+    }
+
     gfx->begin();
-    gfx->fillScreen(WHITE);
-
-    Original_Test_Loop();
-
     gfx->setTextSize(1);
-    gfx->fillScreen(PALERED);
+    gfx->fillScreen(WHITE);
 }
 
 void loop()
@@ -233,79 +222,19 @@ void loop()
 
             int32_t touch_x = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_X);
             int32_t touch_y = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_Y);
-
-            switch (Image_Flag)
-            {
-            case 0:
-                gfx->draw16bitRGBBitmap(0, 0, (uint16_t *)gImage_1, LCD_WIDTH, LCD_HEIGHT); // RGB
-                break;
-            case 1:
-                gfx->draw16bitRGBBitmap(0, 0, (uint16_t *)gImage_2, LCD_WIDTH, LCD_HEIGHT); // RGB
-                break;
-
-            default:
-                break;
-            }
-
-            Image_Flag++;
-
-            if (Image_Flag > 1)
-            {
-                Image_Flag = 0;
-            }
-
             Serial.printf("[1] point x: %d  point y: %d \r\n", touch_x, touch_y);
 
-            gfx->setCursor(touch_x, touch_y);
-            gfx->setTextColor(RED);
-            gfx->printf("[1] point x: %d  point y: %d \r\n", touch_x, touch_y);
+            // 画面をクリア
+            gfx->fillScreen(WHITE);
+            
+            // 上部に座標を表示
+            gfx->setCursor(10, 10);
+            gfx->setTextColor(BLACK);
+            gfx->printf("X: %d  Y: %d", touch_x, touch_y);
+            
+            // タッチされた場所に円を表示
+            gfx->fillCircle(touch_x, touch_y, 20, RED);
+            gfx->drawCircle(touch_x, touch_y, 20, BLACK);
         }
     }
-}
-
-// optional
-void audio_info(const char *info)
-{
-    Serial.print("info        ");
-    Serial.println(info);
-}
-void audio_id3data(const char *info)
-{ // id3 metadata
-    Serial.print("id3data     ");
-    Serial.println(info);
-}
-void audio_eof_mp3(const char *info)
-{ // end of file
-    Serial.print("eof_mp3     ");
-    Serial.println(info);
-}
-void audio_showstation(const char *info)
-{
-    Serial.print("station     ");
-    Serial.println(info);
-}
-void audio_showstreamtitle(const char *info)
-{
-    Serial.print("streamtitle ");
-    Serial.println(info);
-}
-void audio_bitrate(const char *info)
-{
-    Serial.print("bitrate     ");
-    Serial.println(info);
-}
-void audio_commercial(const char *info)
-{ // duration in sec
-    Serial.print("commercial  ");
-    Serial.println(info);
-}
-void audio_icyurl(const char *info)
-{ // homepage
-    Serial.print("icyurl      ");
-    Serial.println(info);
-}
-void audio_lasthost(const char *info)
-{ // stream URL played
-    Serial.print("lasthost    ");
-    Serial.println(info);
 }

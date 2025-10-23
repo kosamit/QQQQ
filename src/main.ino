@@ -76,9 +76,9 @@ struct ModeButton {
 };
 
 ModeButton modeButton = {
-    50,                // x: グリッドと同じX位置
-    320,               // y: グリッドの下
-    240,               // width: グリッドと同じ幅
+    11,                // x: グリッドと同じX位置
+    280,               // y: グリッドの下
+    200,               // width: グリッドと同じ幅
     40,                // height: ボタンの高さ
     "Mode: TOGGLE",    // label_toggle
     "Mode: HOLD"       // label_hold
@@ -265,8 +265,11 @@ void setup()
     Init_Touch_Info();
     
     // グリッドを作成（画面中央に配置）
+    // 画面サイズ: 222x480
+    // セルサイズ: 50x50、グリッド全体: 200x200
+    // 中央配置: X=(222-200)/2=11
     grid = new Grid4x4(gfx);
-    grid->init(50, 50, 60, 60);  // x=50, y=50から開始、セルサイズ60x60
+    grid->init(11, 50, 50, 50);  // x=11, y=50から開始、セルサイズ50x50
     
     // グリッドの設定
     grid->setLineThickness(2);

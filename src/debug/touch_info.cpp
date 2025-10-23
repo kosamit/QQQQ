@@ -49,9 +49,19 @@ void Update_Touch_Info()
     global_touch_info.touch_y[4] = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH5_COORDINATE_Y);
     global_touch_info.fingers_number = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_FINGER_NUMBER);
     
+    // Rotate coordinates for rotation=3 (270 degrees clockwise / 90 degrees counter-clockwise)
+    // Original screen: 222x480, Rotated screen: 480x222
+    // Transform: new_x = LCD_HEIGHT - 1 - old_y, new_y = old_x
+    for (int i = 0; i < 5; i++) {
+        int32_t old_x = global_touch_info.touch_x[i];
+        int32_t old_y = global_touch_info.touch_y[i];
+        global_touch_info.touch_x[i] = LCD_HEIGHT - 1 - old_y;
+        global_touch_info.touch_y[i] = old_x;
+    }
+    
     // Debug output to check raw values (コメントアウトで高速化)
     // if (global_touch_info.fingers_number > 0) {
-    //     Serial.printf("Raw: Fingers=%d ", global_touch_info.fingers_number);
+    //     Serial.printf("Rotated: Fingers=%d ", global_touch_info.fingers_number);
     //     for (int i = 0; i < global_touch_info.fingers_number && i < 5; i++) {
     //         Serial.printf("T%d:(%d,%d) ", i+1, 
     //                       global_touch_info.touch_x[i], global_touch_info.touch_y[i]);
@@ -60,10 +70,10 @@ void Update_Touch_Info()
     // }
     
     // Filter out invalid coordinates
-    // 座標が0以下、または明らかに範囲外の場合のみ無効とする
+    // 座標が0以下、または回転後の画面サイズ(480x222)を超える場合は無効とする
     for (int i = 0; i < 5; i++) {
         if (global_touch_info.touch_x[i] <= 0 || global_touch_info.touch_y[i] <= 0 ||
-            global_touch_info.touch_x[i] > 300 || global_touch_info.touch_y[i] > 500) {
+            global_touch_info.touch_x[i] > LCD_HEIGHT || global_touch_info.touch_y[i] > LCD_WIDTH) {
             global_touch_info.touch_x[i] = 0;
             global_touch_info.touch_y[i] = 0;
         }

@@ -126,8 +126,9 @@ void GFX_Print_START()
 void GFX_Print_Time_Info_Loop()
 {
     // 右上の時間表示エリアをクリア（小さな矩形）
-    gfx->fillRect(LCD_WIDTH - 80, 10, 70, 20, WHITE);
-    gfx->drawRect(LCD_WIDTH - 80, 10, 70, 20, BLACK);
+    // rotation=3の場合、画面は480x222になる
+    gfx->fillRect(LCD_HEIGHT - 80, 10, 70, 20, WHITE);
+    gfx->drawRect(LCD_HEIGHT - 80, 10, 70, 20, BLACK);
 
     if (Wifi_Connection_Flag == true)
     {
@@ -135,14 +136,14 @@ void GFX_Print_Time_Info_Loop()
         if (!getLocalTime(&timeinfo, 1000))
         {
             Serial.println("Failed to obtain time");
-            gfx->setCursor(LCD_WIDTH - 75, 15);
+            gfx->setCursor(LCD_HEIGHT - 75, 15);
             gfx->setTextColor(RED);
             gfx->setTextSize(1);
             gfx->print("Error");
             return;
         }
         // hh:mm:ss形式で右上に表示
-        gfx->setCursor(LCD_WIDTH - 75, 15);
+        gfx->setCursor(LCD_HEIGHT - 75, 15);
         gfx->setTextColor(BLACK);
         gfx->setTextSize(1);
         gfx->print(&timeinfo, "%H:%M:%S");
@@ -155,7 +156,7 @@ void GFX_Print_Time_Info_Loop()
         uint8_t second = PCF85063->IIC_Read_Device_Value(PCF85063->Arduino_IIC_RTC::Value_Information::RTC_SECONDS_DATA);
         
         // hh:mm:ss形式で右上に表示
-        gfx->setCursor(LCD_WIDTH - 75, 15);
+        gfx->setCursor(LCD_HEIGHT - 75, 15);
         gfx->setTextColor(BLACK);
         gfx->setTextSize(1);
         gfx->printf("%02d:%02d:%02d", hour, minute, second);

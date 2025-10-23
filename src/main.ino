@@ -41,7 +41,7 @@ Arduino_DataBus *bus = new Arduino_HWSPI(
     LCD_DC /* DC */, LCD_CS /* CS */, LCD_SCLK /* SCK */, LCD_MOSI /* MOSI */, LCD_MISO /* MISO */);
 
 Arduino_GFX *gfx = new Arduino_ST7796(
-    bus, LCD_RST /* RST */, 0 /* rotation */, true /* IPS */,
+    bus, LCD_RST /* RST */, 3 /* rotation */, true /* IPS */,
     LCD_WIDTH /* width */, LCD_HEIGHT /* height */,
     49 /* col offset 1 */, 0 /* row offset 1 */, 0 /* col_offset2 */, 0 /* row_offset2 */);
 
@@ -76,9 +76,9 @@ struct ModeButton {
 };
 
 ModeButton modeButton = {
-    11,                // x: グリッドと同じX位置
-    280,               // y: グリッドの下
-    200,               // width: グリッドと同じ幅
+    10,                // x: 左上
+    10,                // y: 左上
+    120,               // width: ボタンの幅
     40,                // height: ボタンの高さ
     "Mode: TOGGLE",    // label_toggle
     "Mode: HOLD"       // label_hold
@@ -265,11 +265,11 @@ void setup()
     Init_Touch_Info();
     
     // グリッドを作成（画面中央に配置）
-    // 画面サイズ: 222x480
+    // 画面サイズ: 480x222 (rotation=3で回転後)
     // セルサイズ: 50x50、グリッド全体: 200x200
-    // 中央配置: X=(222-200)/2=11
+    // 中央配置: X=(480-200)/2=140, Y=(222-200)/2=11
     grid = new Grid4x4(gfx);
-    grid->init(11, 50, 50, 50);  // x=11, y=50から開始、セルサイズ50x50
+    grid->init(140, 11, 50, 50);  // x=140, y=11から開始、セルサイズ50x50
     
     // グリッドの設定
     grid->setLineThickness(2);

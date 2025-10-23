@@ -256,6 +256,62 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
     return handled;
 }
 
+// マルチタッチ対応の処理（シンプル版）
+void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerCount) {
+    // 現在タッチされているセルを記録
+    bool cellTouched[GRID_TOTAL_CELLS] = {false};
+    
+    for (uint8_t i = 0; i < fingerCount && i < 5; i++) {
+        if (touchX[i] > 0 && touchY[i] > 0) {
+            // タッチ位置がどのセルか判定
+            for (int16_t row = 0; row < GRID_ROWS; row++) {
+                for (int16_t col = 0; col < GRID_COLS; col++) {
+                    if (isPointInCell(touchX[i], touchY[i], row, col)) {
+                        int16_t index = getCellIndex(row, col);
+                        cellTouched[index] = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (_touchMode == TOUCH_MODE_HOLD) {
+        // HOLDモード：タッチされているセルだけをアクティブにする
+        for (int16_t i = 0; i < GRID_TOTAL_CELLS; i++) {
+            bool shouldBeActive = cellTouched[i];
+            
+            if (_cells[i].isActive != shouldBeActive) {
+                _cells[i].isActive = shouldBeActive;
+                _cells[i].fillColor = shouldBeActive ? _activeColor : _inactiveColor;
+                _cells[i].needsRedraw = true;
+            }
+        }
+    } else {
+        // TOGGLEモード：新しくタッチされたセルのみトグル
+        static bool lastCellTouched[GRID_TOTAL_CELLS] = {false};
+        
+        for (int16_t i = 0; i < GRID_TOTAL_CELLS; i++) {
+            // 新しくタッチされた（前回はタッチされていなかった）セル
+            if (cellTouched[i] && !lastCellTouched[i]) {
+                _cells[i].isActive = !_cells[i].isActive;
+                _cells[i].fillColor = _cells[i].isActive ? _activeColor : _inactiveColor;
+                _cells[i].needsRedraw = true;
+                
+                int16_t row = i / GRID_COLS;
+                int16_t col = i % GRID_COLS;
+                Serial.printf("TOGGLEモード: セル[%d,%d] トグル → %s\n", 
+                              row, col, _cells[i].isActive ? "ON" : "OFF");
+            }
+        }
+        
+        // 現在の状態を記憶
+        for (int16_t i = 0; i < GRID_TOTAL_CELLS; i++) {
+            lastCellTouched[i] = cellTouched[i];
+        }
+    }
+}
+
 void Grid4x4::clearAllTouches() {
     for (int i = 0; i < GRID_TOTAL_CELLS; i++) {
         _cells[i].isTouched = false;

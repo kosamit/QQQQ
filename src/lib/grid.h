@@ -85,6 +85,7 @@ public:
     
     // タッチ処理関数
     bool handleTouch(int16_t touchX, int16_t touchY, bool isPressed);
+    void handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerCount);  // マルチタッチ対応
     void clearAllTouches();
     void clearAllActive();
     

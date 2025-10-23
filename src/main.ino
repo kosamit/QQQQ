@@ -94,12 +94,11 @@ TaskHandle_t clockTaskHandle = NULL;
 QueueHandle_t touchEventQueue = NULL;
 SemaphoreHandle_t displayMutex = NULL;
 
-// タッチイベント構造体
+// タッチイベント構造体（マルチタッチ対応）
 struct TouchEvent {
-    int16_t x;
-    int16_t y;
-    bool is_pressed;
-    uint8_t fingers;
+    uint8_t finger_count;      // タッチしている指の数
+    int16_t x[5];              // 各タッチポイントのX座標
+    int16_t y[5];              // 各タッチポイントのY座標
 };
 
 // FreeRTOS タスク関数の前方宣言
@@ -348,59 +347,45 @@ void setup()
     Serial.println("FreeRTOS タスクが正常に開始されました");
 }
 
-// タッチ処理タスク（割り込み駆動）
+// タッチ処理タスク（割り込み駆動・マルチタッチ対応）
 void touchTask(void* parameter)
 {
-    Serial.println("タッチタスク開始（割り込み駆動モード）");
-    
-    static bool lastTouchState = false;  // 前回のタッチ状態を記憶
+    Serial.println("タッチタスク開始（割り込み駆動・マルチタッチ対応）");
     
     while (true) {
-        // 割り込みからの通知を待機（無期限に待機）
-        // 割り込みが発生すると、ulTaskNotifyTake()が返る
+        // 割り込みからの通知を待機
         uint32_t notificationValue = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
         if (notificationValue > 0) {
-            // 割り込みが発生したので、タッチ情報を更新
-            Serial.println("タッチ割り込み検出");
-            
             // 少し待ってから読み取り（デバウンス）
             vTaskDelay(pdMS_TO_TICKS(20));
             
             // タッチ情報を更新
             Update_Touch_Info();
             
-            bool currentTouchState = (global_touch_info.fingers_number > 0);
+            // マルチタッチイベントを作成
+            TouchEvent event;
+            event.finger_count = global_touch_info.fingers_number;
             
-            // タッチ状態が変化した場合のみイベントを送信
-            if (currentTouchState != lastTouchState || currentTouchState) {
-                TouchEvent event;
-                
-                if (currentTouchState) {
-                    // タッチ開始
-                    event.x = global_touch_info.touch_x[0];
-                    event.y = global_touch_info.touch_y[0];
-                    event.is_pressed = true;
-                    event.fingers = global_touch_info.fingers_number;
-                    
-                    Serial.printf("タッチ開始: X=%d, Y=%d, Fingers=%d\n", 
-                                  event.x, event.y, event.fingers);
-                } else {
-                    // タッチ終了
-                    event.x = global_touch_info.prev_touch_x[0];
-                    event.y = global_touch_info.prev_touch_y[0];
-                    event.is_pressed = false;
-                    event.fingers = 0;
-                    
-                    Serial.println("タッチ終了");
+            // 全てのタッチポイントをコピー
+            for (int i = 0; i < 5; i++) {
+                event.x[i] = global_touch_info.touch_x[i];
+                event.y[i] = global_touch_info.touch_y[i];
+            }
+            
+            // デバッグ出力
+            if (event.finger_count > 0) {
+                Serial.printf("マルチタッチ: %d本\n", event.finger_count);
+                for (int i = 0; i < event.finger_count; i++) {
+                    Serial.printf("  指%d: X=%d, Y=%d\n", i+1, event.x[i], event.y[i]);
                 }
-                
-                // キューにイベントを送信 (待機しない)
-                if (xQueueSend(touchEventQueue, &event, 0) != pdTRUE) {
-                    Serial.println("タッチイベントキューが満杯です");
-                }
-                
-                lastTouchState = currentTouchState;
+            } else {
+                Serial.println("タッチ終了");
+            }
+            
+            // キューにイベントを送信
+            if (xQueueSend(touchEventQueue, &event, 0) != pdTRUE) {
+                Serial.println("タッチイベントキューが満杯です");
             }
             
             // 割り込みフラグをクリア
@@ -409,25 +394,25 @@ void touchTask(void* parameter)
     }
 }
 
-// ディスプレイ更新タスク
+// ディスプレイ更新タスク（マルチタッチ対応）
 void displayTask(void* parameter)
 {
-    Serial.println("ディスプレイタスク開始");
+    Serial.println("ディスプレイタスク開始（マルチタッチ対応）");
     
     TouchEvent event;
     
     while (true) {
         // キューからタッチイベントを受信 (最大100ms待機)
         if (xQueueReceive(touchEventQueue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
-            Serial.printf("ディスプレイタスク: イベント受信 X=%d, Y=%d, Pressed=%d\n", 
-                          event.x, event.y, event.is_pressed);
+            Serial.printf("ディスプレイタスク: %d本の指を検出\n", event.finger_count);
             
             // ディスプレイミューテックスを取得
             if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                bool handled = false;
+                bool buttonHandled = false;
                 
-                // モード切り替えボタンのタッチを処理（タッチ開始時のみ）
-                if (event.is_pressed && isTouchInButton(event.x, event.y, modeButton)) {
+                // モード切り替えボタンのタッチを処理（最初の指のみ）
+                if (event.finger_count > 0 && 
+                    isTouchInButton(event.x[0], event.y[0], modeButton)) {
                     // タッチモードを切り替え
                     if (currentTouchMode == TOUCH_MODE_TOGGLE) {
                         currentTouchMode = TOUCH_MODE_HOLD;
@@ -439,22 +424,19 @@ void displayTask(void* parameter)
                     
                     grid->setTouchMode(currentTouchMode);
                     drawModeButton();
-                    handled = true;
+                    buttonHandled = true;
                 }
                 
-                // グリッドでタッチを処理
-                if (!handled && grid->handleTouch(event.x, event.y, event.is_pressed)) {
+                // ボタンが押されていなければ、グリッドでマルチタッチを処理
+                if (!buttonHandled) {
+                    grid->handleMultiTouch(event.x, event.y, event.finger_count);
+                    
+                    // 変更されたセルを再描画
+                    grid->redrawChangedCells();
+                    
                     // アクティブなセルの数を表示
                     int16_t activeCount = grid->getActiveCellCount();
                     Serial.printf("アクティブセル数: %d\n", activeCount);
-                    
-                    // 変更されたセルだけを再描画
-                    grid->redrawChangedCells();
-                    handled = true;
-                }
-                
-                if (!handled) {
-                    Serial.println("グリッド外のタッチ");
                 }
                 
                 // ミューテックスを解放

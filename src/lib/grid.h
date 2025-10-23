@@ -32,6 +32,7 @@ enum TouchMode {
 struct GridCell {
     bool isActive;        // アクティブ状態
     bool isTouched;       // タッチ中かどうか
+    bool needsRedraw;     // 再描画が必要かどうか
     uint16_t fillColor;   // 内部の色
     uint16_t lineColor;   // 線の色
 };
@@ -90,6 +91,9 @@ public:
     // 描画関数
     void draw();
     void redraw();
+    void redrawChangedCells();  // 変更されたセルだけを再描画
+    void redrawCell(int16_t row, int16_t col);  // 特定のセルを再描画
+    void markCellForRedraw(int16_t row, int16_t col);  // セルを再描画対象としてマーク
     
     // ユーティリティ関数
     int16_t getCellRow(int16_t touchY) const;

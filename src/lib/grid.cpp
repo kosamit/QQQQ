@@ -30,6 +30,7 @@ Grid4x4::Grid4x4(Arduino_GFX* gfx) {
     for (int i = 0; i < GRID_TOTAL_CELLS; i++) {
         _cells[i].isActive = false;
         _cells[i].isTouched = false;
+        _cells[i].needsRedraw = false;
         _cells[i].fillColor = _inactiveColor;
         _cells[i].lineColor = _gridLineColor;
     }
@@ -51,6 +52,7 @@ void Grid4x4::init(int16_t startX, int16_t startY, int16_t cellWidth, int16_t ce
     for (int i = 0; i < GRID_TOTAL_CELLS; i++) {
         _cells[i].isActive = false;
         _cells[i].isTouched = false;
+        _cells[i].needsRedraw = false;
         _cells[i].fillColor = _inactiveColor;
         _cells[i].lineColor = _gridLineColor;
     }
@@ -100,8 +102,11 @@ void Grid4x4::setTouchMode(TouchMode mode) {
 void Grid4x4::setCellActive(int16_t row, int16_t col, bool active) {
     if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
         int16_t index = getCellIndex(row, col);
-        _cells[index].isActive = active;
-        _cells[index].fillColor = active ? _activeColor : _inactiveColor;
+        if (_cells[index].isActive != active) {
+            _cells[index].isActive = active;
+            _cells[index].fillColor = active ? _activeColor : _inactiveColor;
+            _cells[index].needsRedraw = true;  // 再描画が必要
+        }
     }
 }
 
@@ -117,6 +122,7 @@ void Grid4x4::toggleCellActive(int16_t row, int16_t col) {
         int16_t index = getCellIndex(row, col);
         _cells[index].isActive = !_cells[index].isActive;
         _cells[index].fillColor = _cells[index].isActive ? _activeColor : _inactiveColor;
+        _cells[index].needsRedraw = true;  // 再描画が必要
     }
 }
 
@@ -166,13 +172,23 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
             if (!_lastTouchState || _lastTouchedRow != currentRow || _lastTouchedCol != currentCol) {
                 if (_touchMode == TOUCH_MODE_TOGGLE) {
                     // 切り替えモード：タッチでアクティブ/非アクティブを切り替え
+                    bool oldState = _cells[index].isActive;
                     _cells[index].isActive = !_cells[index].isActive;
                     _cells[index].fillColor = _cells[index].isActive ? _activeColor : _inactiveColor;
+                    _cells[index].needsRedraw = true;  // 再描画が必要
+                    
+                    Serial.printf("セル[%d,%d] トグル: %s → %s\n", 
+                                  currentRow, currentCol, 
+                                  oldState ? "ON" : "OFF", 
+                                  _cells[index].isActive ? "ON" : "OFF");
                 } else {
                     // ホールドモード：タッチ中のみアクティブ
                     _cells[index].isActive = true;
                     _cells[index].fillColor = _activeColor;
+                    _cells[index].needsRedraw = true;  // 再描画が必要
                 }
+            } else {
+                Serial.printf("セル[%d,%d] 同じセルの連続タッチ - スキップ\n", currentRow, currentCol);
             }
             
             // 現在のタッチ状態を記録
@@ -183,18 +199,15 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
             // タッチ終了
             _cells[index].isTouched = false;
             
-            if (_touchMode == TOUCH_MODE_TOGGLE) {
-                // 切り替えモード：タッチ終了時にも切り替え処理を実行
-                // 前回タッチしていた場合のみ切り替え（重複を防ぐ）
-                if (_lastTouchState && _lastTouchedRow == currentRow && _lastTouchedCol == currentCol) {
-                    _cells[index].isActive = !_cells[index].isActive;
-                    _cells[index].fillColor = _cells[index].isActive ? _activeColor : _inactiveColor;
-                }
-            } else if (_touchMode == TOUCH_MODE_HOLD) {
+            Serial.printf("セル[%d,%d] タッチ終了\n", currentRow, currentCol);
+            
+            if (_touchMode == TOUCH_MODE_HOLD) {
                 // ホールドモード：タッチ終了で非アクティブに戻す
                 _cells[index].isActive = false;
                 _cells[index].fillColor = _inactiveColor;
+                _cells[index].needsRedraw = true;  // 再描画が必要
             }
+            // TOGGLEモードの場合は、タッチ開始時のみトグルするため、ここでは何もしない
             
             // タッチ状態をリセット
             _lastTouchState = false;
@@ -252,6 +265,36 @@ void Grid4x4::drawCell(int16_t row, int16_t col) {
 
 void Grid4x4::redraw() {
     draw();
+}
+
+// 変更されたセルだけを再描画
+void Grid4x4::redrawChangedCells() {
+    for (int16_t row = 0; row < GRID_ROWS; row++) {
+        for (int16_t col = 0; col < GRID_COLS; col++) {
+            int16_t index = getCellIndex(row, col);
+            if (_cells[index].needsRedraw) {
+                drawCell(row, col);
+                _cells[index].needsRedraw = false;  // フラグをクリア
+            }
+        }
+    }
+}
+
+// 特定のセルを再描画
+void Grid4x4::redrawCell(int16_t row, int16_t col) {
+    if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+        drawCell(row, col);
+        int16_t index = getCellIndex(row, col);
+        _cells[index].needsRedraw = false;  // フラグをクリア
+    }
+}
+
+// セルを再描画対象としてマーク
+void Grid4x4::markCellForRedraw(int16_t row, int16_t col) {
+    if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+        int16_t index = getCellIndex(row, col);
+        _cells[index].needsRedraw = true;
+    }
 }
 
 // ユーティリティ関数

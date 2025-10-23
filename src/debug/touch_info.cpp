@@ -49,11 +49,11 @@ void Update_Touch_Info()
     global_touch_info.touch_y[4] = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH5_COORDINATE_Y);
     global_touch_info.fingers_number = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_FINGER_NUMBER);
     
-    // Debug output to check raw values
-    Serial.printf("Raw values - Fingers: %d, X1: %d, Y1: %d, X2: %d, Y2: %d\n", 
-                  global_touch_info.fingers_number,
-                  global_touch_info.touch_x[0], global_touch_info.touch_y[0],
-                  global_touch_info.touch_x[1], global_touch_info.touch_y[1]);
+    // Debug output to check raw values (uncomment if needed for debugging)
+    // Serial.printf("Raw values - Fingers: %d, X1: %d, Y1: %d, X2: %d, Y2: %d\n", 
+    //               global_touch_info.fingers_number,
+    //               global_touch_info.touch_x[0], global_touch_info.touch_y[0],
+    //               global_touch_info.touch_x[1], global_touch_info.touch_y[1]);
     
     // Filter out invalid coordinates (8 seems to be a default/invalid value)
     for (int i = 0; i < 5; i++) {

@@ -1,14 +1,18 @@
 /*
- * @Description: Qurospad
+ * @Description: Qurospad with FreeRTOS
  * @Author: kosamit
  * @Date: 2025-10-05 09:34:58
- * @LastEditTime: 2025-10-05 09:35:15
+ * @LastEditTime: 2025-10-23 15:00:00
  */
 
 #include "common/common_config.h"
 #include "common/common_functions.h"
 #include "debug/touch_info.h"
 #include "lib/grid.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
 
 // File Download URL Definition
 const char *fileDownloadUrl = "https://freetyst.nf.migu.cn/public/product9th/product45/2022/05/0716/2018%E5%B9%B409%E6%9C%8812%E6%97%A510%E7%82%B943%E5%88%86%E7%B4%A7%E6%80%A5%E5%86%85%E5%AE%B9%E5%87%86%E5%85%A5%E5%8D%8E%E7%BA%B3179%E9%A6%96/%E6%A0%87%E6%B8%85%E9%AB%98%E6%B8%85/MP3_128_16_Stero/6005751EPFG164228.mp3?channelid=02&msisdn=d43a7dcc-8498-461b-ba22-3205e9b6aa82&Tim=1728484238063&Key=0442fa065dacda7c";
@@ -61,9 +65,35 @@ std::unique_ptr<Arduino_IIC> PCF85063(new Arduino_PCF85063(IIC_Bus, PCF85063_DEV
 // グリッドオブジェクト
 Grid4x4* grid;
 
+// FreeRTOS オブジェクト
+TaskHandle_t touchTaskHandle = NULL;
+TaskHandle_t displayTaskHandle = NULL;
+TaskHandle_t clockTaskHandle = NULL;
+QueueHandle_t touchEventQueue = NULL;
+SemaphoreHandle_t displayMutex = NULL;
+
+// タッチイベント構造体
+struct TouchEvent {
+    int16_t x;
+    int16_t y;
+    bool is_pressed;
+    uint8_t fingers;
+};
+
+// FreeRTOS タスク関数の前方宣言
+void touchTask(void* parameter);
+void displayTask(void* parameter);
+void clockTask(void* parameter);
+
 void Arduino_IIC_Touch_Interrupt(void)
 {
     CST226SE->IIC_Interrupt_Flag = true;
+    // タッチタスクに通知
+    if (touchTaskHandle != NULL) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        vTaskNotifyGiveFromISR(touchTaskHandle, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
 }
 
 void Arduino_IIC_RTC_Interrupt(void)
@@ -224,46 +254,194 @@ void setup()
     grid->draw();
     
     Serial.println("4x4 Grid initialized");
+    
+    // FreeRTOS オブジェクトの初期化
+    touchEventQueue = xQueueCreate(10, sizeof(TouchEvent));
+    if (touchEventQueue == NULL) {
+        Serial.println("タッチイベントキューの作成に失敗しました");
+        while(1);
+    }
+    
+    displayMutex = xSemaphoreCreateMutex();
+    if (displayMutex == NULL) {
+        Serial.println("ディスプレイミューテックスの作成に失敗しました");
+        while(1);
+    }
+    
+    // FreeRTOS タスクの作成
+    BaseType_t result;
+    
+    // タッチ処理タスク (優先度: 高)
+    result = xTaskCreatePinnedToCore(
+        touchTask,           // タスク関数
+        "TouchTask",         // タスク名
+        4096,                // スタックサイズ
+        NULL,                // パラメータ
+        3,                   // 優先度 (高)
+        &touchTaskHandle,    // タスクハンドル
+        1                    // コア1で実行
+    );
+    if (result != pdPASS) {
+        Serial.println("タッチタスクの作成に失敗しました");
+        while(1);
+    }
+    
+    // ディスプレイ更新タスク (優先度: 中)
+    result = xTaskCreatePinnedToCore(
+        displayTask,         // タスク関数
+        "DisplayTask",       // タスク名
+        8192,                // スタックサイズ (大きめ)
+        NULL,                // パラメータ
+        2,                   // 優先度 (中)
+        &displayTaskHandle,  // タスクハンドル
+        1                    // コア1で実行
+    );
+    if (result != pdPASS) {
+        Serial.println("ディスプレイタスクの作成に失敗しました");
+        while(1);
+    }
+    
+    // 時計更新タスク (優先度: 低)
+    result = xTaskCreatePinnedToCore(
+        clockTask,           // タスク関数
+        "ClockTask",         // タスク名
+        4096,                // スタックサイズ
+        NULL,                // パラメータ
+        1,                   // 優先度 (低)
+        &clockTaskHandle,    // タスクハンドル
+        1                    // コア1で実行
+    );
+    if (result != pdPASS) {
+        Serial.println("時計タスクの作成に失敗しました");
+        while(1);
+    }
+    
+    Serial.println("FreeRTOS タスクが正常に開始されました");
+}
+
+// タッチ処理タスク（割り込み駆動）
+void touchTask(void* parameter)
+{
+    Serial.println("タッチタスク開始（割り込み駆動モード）");
+    
+    static bool lastTouchState = false;  // 前回のタッチ状態を記憶
+    
+    while (true) {
+        // 割り込みからの通知を待機（無期限に待機）
+        // 割り込みが発生すると、ulTaskNotifyTake()が返る
+        uint32_t notificationValue = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        
+        if (notificationValue > 0) {
+            // 割り込みが発生したので、タッチ情報を更新
+            Serial.println("タッチ割り込み検出");
+            
+            // 少し待ってから読み取り（デバウンス）
+            vTaskDelay(pdMS_TO_TICKS(20));
+            
+            // タッチ情報を更新
+            Update_Touch_Info();
+            
+            bool currentTouchState = (global_touch_info.fingers_number > 0);
+            
+            // タッチ状態が変化した場合のみイベントを送信
+            if (currentTouchState != lastTouchState || currentTouchState) {
+                TouchEvent event;
+                
+                if (currentTouchState) {
+                    // タッチ開始
+                    event.x = global_touch_info.touch_x[0];
+                    event.y = global_touch_info.touch_y[0];
+                    event.is_pressed = true;
+                    event.fingers = global_touch_info.fingers_number;
+                    
+                    Serial.printf("タッチ開始: X=%d, Y=%d, Fingers=%d\n", 
+                                  event.x, event.y, event.fingers);
+                } else {
+                    // タッチ終了
+                    event.x = global_touch_info.prev_touch_x[0];
+                    event.y = global_touch_info.prev_touch_y[0];
+                    event.is_pressed = false;
+                    event.fingers = 0;
+                    
+                    Serial.println("タッチ終了");
+                }
+                
+                // キューにイベントを送信 (待機しない)
+                if (xQueueSend(touchEventQueue, &event, 0) != pdTRUE) {
+                    Serial.println("タッチイベントキューが満杯です");
+                }
+                
+                lastTouchState = currentTouchState;
+            }
+            
+            // 割り込みフラグをクリア
+            CST226SE->IIC_Interrupt_Flag = false;
+        }
+    }
+}
+
+// ディスプレイ更新タスク
+void displayTask(void* parameter)
+{
+    Serial.println("ディスプレイタスク開始");
+    
+    TouchEvent event;
+    
+    while (true) {
+        // キューからタッチイベントを受信 (最大100ms待機)
+        if (xQueueReceive(touchEventQueue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
+            Serial.printf("ディスプレイタスク: イベント受信 X=%d, Y=%d, Pressed=%d\n", 
+                          event.x, event.y, event.is_pressed);
+            
+            // ディスプレイミューテックスを取得
+            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                // グリッドでタッチを処理
+                if (grid->handleTouch(event.x, event.y, event.is_pressed)) {
+                    // アクティブなセルの数を表示
+                    int16_t activeCount = grid->getActiveCellCount();
+                    Serial.printf("アクティブセル数: %d\n", activeCount);
+                    
+                    // 変更されたセルだけを再描画
+                    grid->redrawChangedCells();
+                } else {
+                    Serial.println("グリッド外のタッチ");
+                }
+                
+                // ミューテックスを解放
+                xSemaphoreGive(displayMutex);
+            } else {
+                Serial.println("ディスプレイミューテックスの取得に失敗しました");
+            }
+        }
+    }
+}
+
+// 時計更新タスク
+void clockTask(void* parameter)
+{
+    Serial.println("時計タスク開始");
+    
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    const TickType_t updateInterval = pdMS_TO_TICKS(1000); // 1秒間隔
+    
+    while (true) {
+        // ディスプレイミューテックスを取得
+        if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            // 時計情報を更新
+            GFX_Print_Time_Info_Loop();
+            
+            // ミューテックスを解放
+            xSemaphoreGive(displayMutex);
+        }
+        
+        // 次の更新まで待機
+        vTaskDelayUntil(&lastWakeTime, updateInterval);
+    }
 }
 
 void loop()
 {
-    // 時計表示
-    if (millis() > CycleTime)
-    {
-        GFX_Print_Time_Info_Loop();
-        CycleTime = millis() + 1000;
-    }
-
-    // タッチ情報を更新
-    Update_Touch_Info();
-    
-    // タッチするたびの更新処理
-    if (global_touch_info.has_changed) {
-        // タッチ情報を表示
-        // Print_Touch_Info();
-        
-        // グリッドでタッチを処理
-        if (global_touch_info.fingers_number > 0) {
-            int16_t touchX = global_touch_info.touch_x[0];
-            int16_t touchY = global_touch_info.touch_y[0];
-            bool isPressed = global_touch_info.is_touched;
-            
-            if (grid->handleTouch(touchX, touchY, isPressed)) {
-                // タッチがグリッド内で処理された
-                Serial.println("Grid touched!");
-                
-                // アクティブなセルの数を表示
-                int16_t activeCount = grid->getActiveCellCount();
-                Serial.print("Active cells: ");
-                Serial.println(activeCount);
-                
-                // グリッドを再描画
-                grid->redraw();
-            }
-        }
-    }
-
-    // 4x4のパッドを表示
-    
+    // FreeRTOSタスクが全てを処理するため、loop()は空にする
+    // ただし、完全に削除はできないため、短い遅延を入れる
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }

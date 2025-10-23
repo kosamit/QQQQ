@@ -400,6 +400,7 @@ void displayTask(void* parameter)
     Serial.println("ディスプレイタスク開始（マルチタッチ対応）");
     
     TouchEvent event;
+    static bool lastButtonTouched = false;  // 前回ボタンがタッチされていたか
     
     while (true) {
         // キューからタッチイベントを受信 (最大100ms待機)
@@ -409,23 +410,35 @@ void displayTask(void* parameter)
             // ディスプレイミューテックスを取得
             if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                 bool buttonHandled = false;
+                bool currentButtonTouched = false;
                 
-                // モード切り替えボタンのタッチを処理（最初の指のみ）
+                // モード切り替えボタンのタッチを判定
                 if (event.finger_count > 0 && 
                     isTouchInButton(event.x[0], event.y[0], modeButton)) {
-                    // タッチモードを切り替え
-                    if (currentTouchMode == TOUCH_MODE_TOGGLE) {
-                        currentTouchMode = TOUCH_MODE_HOLD;
-                        Serial.println("モード変更: HOLD");
+                    currentButtonTouched = true;
+                    
+                    // 新しくボタンがタッチされた（前回はタッチされていなかった）場合のみ切り替え
+                    if (!lastButtonTouched) {
+                        // タッチモードを切り替え
+                        if (currentTouchMode == TOUCH_MODE_TOGGLE) {
+                            currentTouchMode = TOUCH_MODE_HOLD;
+                            Serial.println("モード変更: HOLD");
+                        } else {
+                            currentTouchMode = TOUCH_MODE_TOGGLE;
+                            Serial.println("モード変更: TOGGLE");
+                        }
+                        
+                        grid->setTouchMode(currentTouchMode);
+                        drawModeButton();
                     } else {
-                        currentTouchMode = TOUCH_MODE_TOGGLE;
-                        Serial.println("モード変更: TOGGLE");
+                        Serial.println("ボタン長押し中 - 何もしない");
                     }
                     
-                    grid->setTouchMode(currentTouchMode);
-                    drawModeButton();
                     buttonHandled = true;
                 }
+                
+                // ボタンのタッチ状態を記録
+                lastButtonTouched = currentButtonTouched;
                 
                 // ボタンが押されていなければ、グリッドでマルチタッチを処理
                 if (!buttonHandled) {

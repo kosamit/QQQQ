@@ -259,8 +259,14 @@ void Grid4x4::drawCell(int16_t row, int16_t col) {
     int16_t cellY = _startY + row * _cellHeight;
     int16_t index = getCellIndex(row, col);
     
-    // セルの内部を塗りつぶし
-    _gfx->fillRect(cellX, cellY, _cellWidth, _cellHeight, _cells[index].fillColor);
+    // グリッド線を避けてセルの内部だけを塗りつぶし
+    // 左端と上端にグリッド線があるので、その分をオフセット
+    int16_t innerX = cellX + _lineThickness;
+    int16_t innerY = cellY + _lineThickness;
+    int16_t innerWidth = _cellWidth - _lineThickness;
+    int16_t innerHeight = _cellHeight - _lineThickness;
+    
+    _gfx->fillRect(innerX, innerY, innerWidth, innerHeight, _cells[index].fillColor);
 }
 
 void Grid4x4::redraw() {
@@ -295,6 +301,11 @@ void Grid4x4::markCellForRedraw(int16_t row, int16_t col) {
         int16_t index = getCellIndex(row, col);
         _cells[index].needsRedraw = true;
     }
+}
+
+// グリッド線だけを再描画（公開API）
+void Grid4x4::redrawGridLines() {
+    drawGridLines();
 }
 
 // ユーティリティ関数

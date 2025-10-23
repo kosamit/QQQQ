@@ -94,6 +94,7 @@ public:
     void redrawChangedCells();  // 変更されたセルだけを再描画
     void redrawCell(int16_t row, int16_t col);  // 特定のセルを再描画
     void markCellForRedraw(int16_t row, int16_t col);  // セルを再描画対象としてマーク
+    void redrawGridLines();  // グリッド線だけを再描画（公開API）
     
     // ユーティリティ関数
     int16_t getCellRow(int16_t touchY) const;

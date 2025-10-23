@@ -33,6 +33,7 @@ Grid4x4::Grid4x4(Arduino_GFX* gfx) {
         _cells[i].needsRedraw = false;
         _cells[i].fillColor = _inactiveColor;
         _cells[i].lineColor = _gridLineColor;
+        _cells[i].midiNote = 60 + i;  // デフォルトはC4から
     }
 }
 
@@ -55,6 +56,7 @@ void Grid4x4::init(int16_t startX, int16_t startY, int16_t cellWidth, int16_t ce
         _cells[i].needsRedraw = false;
         _cells[i].fillColor = _inactiveColor;
         _cells[i].lineColor = _gridLineColor;
+        _cells[i].midiNote = 60 + i;  // デフォルトはC4から
     }
 }
 
@@ -467,4 +469,30 @@ bool Grid4x4::isPointInCell(int16_t x, int16_t y, int16_t row, int16_t col) cons
     
     return (x >= cellX && x < cellX + _cellWidth && 
             y >= cellY && y < cellY + _cellHeight);
+}
+
+// MIDI関連関数の実装
+void Grid4x4::setCellMidiNote(int16_t row, int16_t col, uint8_t note) {
+    if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+        int16_t index = getCellIndex(row, col);
+        _cells[index].midiNote = note;
+    }
+}
+
+uint8_t Grid4x4::getCellMidiNote(int16_t row, int16_t col) const {
+    if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+        int16_t index = getCellIndex(row, col);
+        return _cells[index].midiNote;
+    }
+    return 60;  // デフォルトはC4
+}
+
+void Grid4x4::setDefaultMidiNotes(uint8_t startNote) {
+    for (int16_t row = 0; row < GRID_ROWS; row++) {
+        for (int16_t col = 0; col < GRID_COLS; col++) {
+            int16_t index = getCellIndex(row, col);
+            // 左から右、上から下に並べる
+            _cells[index].midiNote = startNote + index;
+        }
+    }
 }

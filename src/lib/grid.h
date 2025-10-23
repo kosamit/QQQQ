@@ -35,6 +35,7 @@ struct GridCell {
     bool needsRedraw;     // 再描画が必要かどうか
     uint16_t fillColor;   // 内部の色
     uint16_t lineColor;   // 線の色
+    uint8_t midiNote;     // MIDIノート番号
 };
 
 class Grid4x4 {
@@ -108,6 +109,11 @@ public:
     int16_t getTouchedCellCount() const;
     void getActiveCells(int16_t* rows, int16_t* cols, int16_t maxCount) const;
     void getTouchedCells(int16_t* rows, int16_t* cols, int16_t maxCount) const;
+    
+    // MIDI関連関数
+    void setCellMidiNote(int16_t row, int16_t col, uint8_t note);
+    uint8_t getCellMidiNote(int16_t row, int16_t col) const;
+    void setDefaultMidiNotes(uint8_t startNote = 60);  // デフォルトC4から開始
 };
 
 #endif // GRID_H

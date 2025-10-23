@@ -13,6 +13,10 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
+#include <BLEMIDI_Transport.h>
+#include <hardware/BLEMIDI_ESP32.h>
+#include <esp_bt.h>
+#include <esp_bt_main.h>
 
 // File Download URL Definition
 const char *fileDownloadUrl = "https://freetyst.nf.migu.cn/public/product9th/product45/2022/05/0716/2018%E5%B9%B409%E6%9C%8812%E6%97%A510%E7%82%B943%E5%88%86%E7%B4%A7%E6%80%A5%E5%86%85%E5%AE%B9%E5%87%86%E5%85%A5%E5%8D%8E%E7%BA%B3179%E9%A6%96/%E6%A0%87%E6%B8%85%E9%AB%98%E6%B8%85/MP3_128_16_Stero/6005751EPFG164228.mp3?channelid=02&msisdn=d43a7dcc-8498-461b-ba22-3205e9b6aa82&Tim=1728484238063&Key=0442fa065dacda7c";
@@ -62,8 +66,19 @@ std::unique_ptr<Arduino_IIC> SY6970(new Arduino_SY6970(IIC_Bus, SY6970_DEVICE_AD
 std::unique_ptr<Arduino_IIC> PCF85063(new Arduino_PCF85063(IIC_Bus, PCF85063_DEVICE_ADDRESS,
                                                            DRIVEBUS_DEFAULT_VALUE, PCF85063_INT, Arduino_IIC_RTC_Interrupt));
 
+// BLE-MIDI インスタンス
+BLEMIDI_CREATE_INSTANCE("Qurospad", MIDI);
+
 // グリッドオブジェクト
 Grid4x4* grid;
+
+// 前回のセル状態を保持（MIDI送信用）
+bool prevCellState[GRID_ROWS * GRID_COLS] = {false};
+
+// Bluetooth接続状態
+bool bleConnected = false;
+bool bleAdvertising = false;  // アドバタイズ中かどうか
+unsigned long lastBleStatusUpdate = 0;
 
 // モード切り替えボタンの定義
 struct ModeButton {
@@ -82,6 +97,21 @@ ModeButton modeButton = {
     40,                // height: ボタンの高さ
     "Mode: TOGGLE",    // label_toggle
     "Mode: HOLD"       // label_hold
+};
+
+// Bluetoothトグルボタンの定義
+struct BluetoothButton {
+    int16_t x;
+    int16_t y;
+    int16_t width;
+    int16_t height;
+};
+
+BluetoothButton bleButton = {
+    350,               // x: 右側
+    172,               // y: 下側（222-40-10=172）
+    120,               // width
+    40                 // height
 };
 
 // 現在のタッチモード
@@ -109,6 +139,15 @@ void clockTask(void* parameter);
 // ボタン関連関数の前方宣言
 void drawModeButton();
 bool isTouchInButton(int16_t touchX, int16_t touchY, const ModeButton& btn);
+
+// MIDI関連関数の前方宣言
+void sendMidiNotesForChangedCells();
+void drawBluetoothStatus();
+void onBLEConnected();
+void onBLEDisconnected();
+void toggleBluetooth();
+void startBluetooth();
+void stopBluetooth();
 
 void Arduino_IIC_Touch_Interrupt(void)
 {
@@ -228,6 +267,10 @@ void setup()
     Volume_Value = 3;
     audio.setVolume(Volume_Value); // 0...21、音量設定
 
+    // BLE-MIDI 初期化（自動起動）
+    Serial.println("Initializing BLE-MIDI...");
+    startBluetooth();
+
     // WiFi接続を開始（設定で有効化されている場合のみ）
     if (ENABLE_WIFI_CONNECTION) {
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -278,11 +321,17 @@ void setup()
     grid->setInactiveColor(0x0000);      // 黒色（非アクティブ時）
     grid->setTouchMode(TOUCH_MODE_TOGGLE); // タッチで切り替えモード
     
+    // MIDIノート番号を設定（C4=60から開始）
+    grid->setDefaultMidiNotes(60);
+    
     // グリッドを描画
     grid->draw();
     
     // モード切り替えボタンを描画
     drawModeButton();
+    
+    // Bluetooth接続状態を描画
+    drawBluetoothStatus();
     
     Serial.println("4x4 Grid initialized");
     
@@ -422,12 +471,33 @@ void displayTask(void* parameter)
                     buttonHandled = true;
                 }
                 
+                // Bluetoothボタンのタッチを判定
+                if (event.finger_count > 0 && !buttonHandled) {
+                    int16_t touchX = event.x[0];
+                    int16_t touchY = event.y[0];
+                    if (touchX >= bleButton.x && touchX < bleButton.x + bleButton.width &&
+                        touchY >= bleButton.y && touchY < bleButton.y + bleButton.height) {
+                        
+                        if (!lastButtonTouched) {
+                            toggleBluetooth();
+                            drawBluetoothStatus();
+                        }
+                        currentButtonTouched = true;
+                        buttonHandled = true;
+                    }
+                }
+                
                 // ボタンのタッチ状態を記録
                 lastButtonTouched = currentButtonTouched;
                 
                 // ボタンが押されていなければ、グリッドでマルチタッチを処理
                 if (!buttonHandled) {
                     grid->handleMultiTouch(event.x, event.y, event.finger_count);
+                    
+                    // HOLDモードの場合のみMIDIノートを送信
+                    if (currentTouchMode == TOUCH_MODE_HOLD) {
+                        sendMidiNotesForChangedCells();
+                    }
                     
                     // 変更されたセルを再描画
                     grid->redrawChangedCells();
@@ -453,6 +523,13 @@ void clockTask(void* parameter)
         if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             // 時計情報を更新
             GFX_Print_Time_Info_Loop();
+            
+            // Bluetooth接続状態を定期的に更新
+            unsigned long currentMillis = millis();
+            if (currentMillis - lastBleStatusUpdate > 1000) {
+                drawBluetoothStatus();
+                lastBleStatusUpdate = currentMillis;
+            }
             
             // ミューテックスを解放
             xSemaphoreGive(displayMutex);
@@ -492,9 +569,211 @@ bool isTouchInButton(int16_t touchX, int16_t touchY, const ModeButton& btn) {
             touchY >= btn.y && touchY < btn.y + btn.height);
 }
 
+// MIDI Note On/Off送信関数（ホールドモード専用）
+void sendMidiNotesForChangedCells() {
+    for (int16_t row = 0; row < GRID_ROWS; row++) {
+        for (int16_t col = 0; col < GRID_COLS; col++) {
+            int16_t index = row * GRID_COLS + col;
+            bool currentState = grid->isCellActive(row, col);
+            
+            // 状態が変化した場合のみMIDI送信
+            if (currentState != prevCellState[index]) {
+                uint8_t note = grid->getCellMidiNote(row, col);
+                uint8_t velocity = 100;  // ベロシティは100に固定
+                
+                if (currentState) {
+                    // Note On送信（BLE-MIDI）
+                    MIDI.sendNoteOn(note, velocity, 1);  // チャンネル1
+                    Serial.printf("BLE-MIDI Note On: %d (Row:%d, Col:%d)\n", note, row, col);
+                } else {
+                    // Note Off送信（BLE-MIDI）
+                    MIDI.sendNoteOff(note, 0, 1);  // チャンネル1
+                    Serial.printf("BLE-MIDI Note Off: %d (Row:%d, Col:%d)\n", note, row, col);
+                }
+                
+                // 前回の状態を更新
+                prevCellState[index] = currentState;
+            }
+        }
+    }
+}
+
+// Bluetooth接続状態を描画
+void drawBluetoothStatus() {
+    // Bluetooth状態表示エリア（右上）
+    int16_t statusX = bleButton.x;
+    int16_t statusY = bleButton.y;
+    int16_t statusWidth = bleButton.width;
+    int16_t statusHeight = bleButton.height;
+    
+    // 背景色を決定
+    uint16_t bgColor;
+    const char* statusText;
+    
+    if (bleConnected) {
+        bgColor = 0x07E0;      // 緑: 接続済み
+        statusText = "CONNECTED";
+    } else if (bleAdvertising) {
+        bgColor = 0xFFE0;      // 黄色: 待機中
+        statusText = "WAITING";
+    } else {
+        bgColor = 0xF800;      // 赤: オフ
+        statusText = "BLE OFF";
+    }
+    
+    // 背景を描画
+    gfx->fillRect(statusX, statusY, statusWidth, statusHeight, bgColor);
+    
+    // 枠を描画
+    gfx->drawRect(statusX, statusY, statusWidth, statusHeight, WHITE);
+    gfx->drawRect(statusX + 1, statusY + 1, statusWidth - 2, statusHeight - 2, WHITE);
+    
+    // テキストを描画
+    gfx->setTextSize(1);
+    gfx->setTextColor(BLACK);
+    
+    int16_t textWidth = strlen(statusText) * 6;
+    int16_t textX = statusX + (statusWidth - textWidth) / 2;
+    int16_t textY = statusY + (statusHeight - 8) / 2;
+    
+    gfx->setCursor(textX, textY);
+    gfx->print(statusText);
+    
+    // デバイス名を表示（画面下部）
+    if (bleAdvertising && !bleConnected) {
+        gfx->fillRect(0, 200, 480, 22, BLACK);  // 背景をクリア
+        gfx->setTextSize(2);
+        gfx->setTextColor(WHITE);
+        gfx->setCursor(10, 200);
+        gfx->print("BLE: Qurospad");
+        
+        gfx->setTextSize(1);
+        gfx->setCursor(350, 200);
+        gfx->print("Tap to stop");
+    }
+}
+
+// Bluetooth開始
+void startBluetooth() {
+    if (!bleAdvertising) {
+        Serial.println("========================================");
+        Serial.println("Starting BLE-MIDI...");
+        
+        // ESP32のBLEを初期化（停止されていた場合）
+        esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+        if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
+            esp_bt_controller_init(&bt_cfg);
+            esp_bt_controller_enable(ESP_BT_MODE_BLE);
+            esp_bluedroid_init();
+            esp_bluedroid_enable();
+            Serial.println("BLE hardware initialized");
+        }
+        
+        // 少し待機
+        delay(100);
+        
+        // BLE接続コールバックを設定（begin前に設定）
+        BLEMIDI.setHandleConnected(onBLEConnected);
+        BLEMIDI.setHandleDisconnected(onBLEDisconnected);
+        
+        // BLE-MIDI開始
+        MIDI.begin(MIDI_CHANNEL_OMNI);
+        
+        bleAdvertising = true;
+        
+        Serial.println("BLE-MIDI started successfully");
+        Serial.println("Device name: Qurospad");
+        Serial.println("Status: Advertising...");
+        Serial.println("========================================");
+    } else {
+        Serial.println("BLE already running");
+    }
+}
+
+// Bluetooth停止
+void stopBluetooth() {
+    if (bleAdvertising) {
+        Serial.println("========================================");
+        Serial.println("Stopping BLE-MIDI...");
+        
+        // BLE切断
+        bleConnected = false;
+        bleAdvertising = false;
+        
+        // ESP32のBLEを完全に停止
+        esp_bluedroid_disable();
+        esp_bluedroid_deinit();
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+        
+        Serial.println("BLE-MIDI stopped completely");
+        Serial.println("BLE hardware disabled");
+        Serial.println("========================================");
+    }
+}
+
+// Bluetoothトグル
+void toggleBluetooth() {
+    if (bleAdvertising) {
+        stopBluetooth();
+    } else {
+        startBluetooth();
+    }
+}
+
+// BLE接続時のコールバック
+void onBLEConnected() {
+    Serial.println("========================================");
+    Serial.println("✓ BLE CONNECTED!");
+    Serial.println("Device is now connected");
+    Serial.println("========================================");
+    
+    bleConnected = true;
+    
+    if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        drawBluetoothStatus();
+        xSemaphoreGive(displayMutex);
+    }
+}
+
+// BLE切断時のコールバック
+void onBLEDisconnected() {
+    Serial.println("========================================");
+    Serial.println("✗ BLE DISCONNECTED");
+    Serial.println("========================================");
+    
+    bleConnected = false;
+    
+    // 再接続のために少し待機してから再度アドバタイズを開始
+    if (bleAdvertising) {
+        Serial.println("Preparing for reconnection...");
+        delay(1000);  // 1秒待機
+        
+        // BLE-MIDIを再初期化して再接続可能にする
+        BLEMIDI.setHandleConnected(onBLEConnected);
+        BLEMIDI.setHandleDisconnected(onBLEDisconnected);
+        MIDI.begin(MIDI_CHANNEL_OMNI);
+        
+        Serial.println("========================================");
+        Serial.println("Ready for reconnection");
+        Serial.println("Status: Advertising...");
+        Serial.println("========================================");
+    }
+    
+    if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        drawBluetoothStatus();
+        xSemaphoreGive(displayMutex);
+    }
+}
+
 void loop()
 {
-    // FreeRTOSタスクが全てを処理するため、loop()は空にする
-    // ただし、完全に削除はできないため、短い遅延を入れる
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // BLE-MIDIのreadを定期的に呼び出して接続を維持
+    // これは接続状態の監視とイベント処理に必要
+    if (bleAdvertising) {
+        MIDI.read();
+    }
+    
+    // FreeRTOSタスクが全てを処理するため、短い遅延を入れる
+    delay(10);
 }

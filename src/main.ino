@@ -80,6 +80,32 @@ bool bleConnected = false;
 bool bleAdvertising = false;  // アドバタイズ中かどうか
 unsigned long lastBleStatusUpdate = 0;
 
+// 画面モード定義
+enum ScreenMode {
+    SCREEN_MENU,           // メニュー画面
+    SCREEN_DRUMPAD,        // ドラムパッド画面
+    SCREEN_BLUETOOTH,      // Bluetooth設定画面
+    SCREEN_ABOUT           // About画面
+};
+
+ScreenMode currentScreen = SCREEN_MENU;  // 起動時はメニュー画面
+
+// メニュー項目定義
+struct MenuItem {
+    const char* label;
+    ScreenMode targetScreen;
+    int16_t x;
+    int16_t y;
+    int16_t width;
+    int16_t height;
+};
+
+MenuItem menuItems[] = {
+    {"Drum Pad", SCREEN_DRUMPAD, 90, 30, 300, 50},
+    {"Bluetooth", SCREEN_BLUETOOTH, 90, 90, 300, 50},
+    {"About", SCREEN_ABOUT, 90, 150, 300, 50}
+};
+
 // モード切り替えボタンの定義
 struct ModeButton {
     int16_t x;
@@ -148,6 +174,13 @@ void onBLEDisconnected();
 void toggleBluetooth();
 void startBluetooth();
 void stopBluetooth();
+
+// 画面描画関数の前方宣言
+void drawMenuScreen();
+void drawDrumPadScreen();
+void drawBluetoothSettingsScreen();
+void drawAboutScreen();
+void switchScreen(ScreenMode newScreen);
 
 void Arduino_IIC_Touch_Interrupt(void)
 {
@@ -267,9 +300,9 @@ void setup()
     Volume_Value = 3;
     audio.setVolume(Volume_Value); // 0...21、音量設定
 
-    // BLE-MIDI 初期化（自動起動）
-    Serial.println("Initializing BLE-MIDI...");
-    startBluetooth();
+    // BLE-MIDI 初期化（手動起動に変更）
+    Serial.println("BLE-MIDI ready (manual start)");
+    Serial.println("Use Bluetooth menu to start");
 
     // WiFi接続を開始（設定で有効化されている場合のみ）
     if (ENABLE_WIFI_CONNECTION) {
@@ -302,38 +335,25 @@ void setup()
 
     gfx->begin();
     gfx->setTextSize(1);
-    gfx->fillScreen(WHITE);
+    gfx->fillScreen(BLACK);
     
     // Initialize touch info
     Init_Touch_Info();
     
-    // グリッドを作成（画面中央に配置）
-    // 画面サイズ: 480x222 (rotation=3で回転後)
-    // セルサイズ: 50x50、グリッド全体: 200x200
-    // 中央配置: X=(480-200)/2=140, Y=(222-200)/2=11
+    // グリッドを作成（ドラムパッド画面用に準備）
     grid = new Grid4x4(gfx);
-    grid->init(140, 11, 50, 50);  // x=140, y=11から開始、セルサイズ50x50
-    
-    // グリッドの設定
+    grid->init(140, 11, 50, 50);
     grid->setLineThickness(2);
-    grid->setGridLineColor(0xFFFF);      // 白い線
-    grid->setActiveColor(0x07E0);        // 緑色（アクティブ時）
-    grid->setInactiveColor(0x0000);      // 黒色（非アクティブ時）
-    grid->setTouchMode(TOUCH_MODE_TOGGLE); // タッチで切り替えモード
-    
-    // MIDIノート番号を設定（C4=60から開始）
+    grid->setGridLineColor(0xFFFF);
+    grid->setActiveColor(0x07E0);
+    grid->setInactiveColor(0x0000);
+    grid->setTouchMode(TOUCH_MODE_TOGGLE);
     grid->setDefaultMidiNotes(60);
     
-    // グリッドを描画
-    grid->draw();
+    // メニュー画面を表示
+    drawMenuScreen();
     
-    // モード切り替えボタンを描画
-    drawModeButton();
-    
-    // Bluetooth接続状態を描画
-    drawBluetoothStatus();
-    
-    Serial.println("4x4 Grid initialized");
+    Serial.println("Qurospad initialized - Menu screen");
     
     // FreeRTOS オブジェクトの初期化
     touchEventQueue = xQueueCreate(10, sizeof(TouchEvent));
@@ -434,73 +454,151 @@ void touchTask(void* parameter)
     }
 }
 
-// ディスプレイ更新タスク（マルチタッチ対応）
+// ディスプレイ更新タスク（画面ごとに完全分離）
 void displayTask(void* parameter)
 {
-    Serial.println("ディスプレイタスク開始（マルチタッチ対応）");
+    Serial.println("ディスプレイタスク開始（画面分離モード）");
     
     TouchEvent event;
-    static bool lastButtonTouched = false;  // 前回ボタンがタッチされていたか
+    
+    // 画面ごとの状態変数
+    static bool menuLastTouched = false;
+    static bool drumpadLastButtonTouched = false;
+    static bool bluetoothLastTouched = false;
+    static bool aboutLastTouched = false;
     
     while (true) {
-        // キューからタッチイベントを受信 (最大1ms待機 = 最高速ポーリング)
+        // キューからタッチイベントを受信
         if (xQueueReceive(touchEventQueue, &event, pdMS_TO_TICKS(1)) == pdTRUE) {
-            // ディスプレイミューテックスを取得（即座に取得）
+            // ディスプレイミューテックスを取得
             if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-                bool buttonHandled = false;
-                bool currentButtonTouched = false;
                 
-                // モード切り替えボタンのタッチを判定
-                if (event.finger_count > 0 && 
-                    isTouchInButton(event.x[0], event.y[0], modeButton)) {
-                    currentButtonTouched = true;
-                    
-                    // 新しくボタンがタッチされた場合のみ切り替え
-                    if (!lastButtonTouched) {
-                        // タッチモードを切り替え
-                        if (currentTouchMode == TOUCH_MODE_TOGGLE) {
-                            currentTouchMode = TOUCH_MODE_HOLD;
-                        } else {
-                            currentTouchMode = TOUCH_MODE_TOGGLE;
-                        }
+                // 現在の画面をローカル変数にコピー（処理中に変更されないように）
+                ScreenMode screen = currentScreen;
+                
+                // ========================================
+                // メニュー画面の処理
+                // ========================================
+                if (screen == SCREEN_MENU) {
+                    if (event.finger_count > 0 && !menuLastTouched) {
+                        int16_t touchX = event.x[0];
+                        int16_t touchY = event.y[0];
                         
-                        grid->setTouchMode(currentTouchMode);
-                        drawModeButton();
+                        for (int i = 0; i < 3; i++) {
+                            MenuItem& item = menuItems[i];
+                            if (touchX >= item.x && touchX < item.x + item.width &&
+                                touchY >= item.y && touchY < item.y + item.height) {
+                                switchScreen(item.targetScreen);
+                                menuLastTouched = true;
+                                break;
+                            }
+                        }
                     }
                     
-                    buttonHandled = true;
+                    if (event.finger_count == 0) {
+                        menuLastTouched = false;
+                    }
                 }
                 
-                // Bluetoothボタンのタッチを判定
-                if (event.finger_count > 0 && !buttonHandled) {
-                    int16_t touchX = event.x[0];
-                    int16_t touchY = event.y[0];
-                    if (touchX >= bleButton.x && touchX < bleButton.x + bleButton.width &&
-                        touchY >= bleButton.y && touchY < bleButton.y + bleButton.height) {
+                // ========================================
+                // ドラムパッド画面の処理（完全独立）
+                // ========================================
+                else if (screen == SCREEN_DRUMPAD) {
+                    bool buttonHandled = false;
+                    bool currentButtonTouched = false;
+                    
+                    if (event.finger_count > 0) {
+                        int16_t touchX = event.x[0];
+                        int16_t touchY = event.y[0];
                         
-                        if (!lastButtonTouched) {
+                        // 戻るボタン
+                        if (touchX >= 10 && touchX < 110 && touchY >= 172 && touchY < 212) {
+                            currentButtonTouched = true;
+                            if (!drumpadLastButtonTouched) {
+                                switchScreen(SCREEN_MENU);
+                                drumpadLastButtonTouched = true;
+                                xSemaphoreGive(displayMutex);
+                                continue;  // すぐにループを続ける
+                            }
+                            buttonHandled = true;
+                        }
+                        // モード切り替えボタン
+                        else if (isTouchInButton(touchX, touchY, modeButton)) {
+                            currentButtonTouched = true;
+                            
+                            if (!drumpadLastButtonTouched) {
+                                if (currentTouchMode == TOUCH_MODE_TOGGLE) {
+                                    currentTouchMode = TOUCH_MODE_HOLD;
+                                } else {
+                                    currentTouchMode = TOUCH_MODE_TOGGLE;
+                                }
+                                
+                                grid->setTouchMode(currentTouchMode);
+                                drawModeButton();
+                            }
+                            
+                            buttonHandled = true;
+                        }
+                    }
+                    
+                    drumpadLastButtonTouched = currentButtonTouched;
+                    
+                    // ボタンが押されていない場合のみグリッド処理
+                    if (!buttonHandled && screen == SCREEN_DRUMPAD) {
+                        grid->handleMultiTouch(event.x, event.y, event.finger_count);
+                        
+                        if (currentTouchMode == TOUCH_MODE_HOLD) {
+                            sendMidiNotesForChangedCells();
+                        }
+                        
+                        grid->redrawChangedCells();
+                    }
+                }
+                
+                // ========================================
+                // Bluetooth設定画面の処理
+                // ========================================
+                else if (screen == SCREEN_BLUETOOTH) {
+                    if (event.finger_count > 0 && !bluetoothLastTouched) {
+                        int16_t touchX = event.x[0];
+                        int16_t touchY = event.y[0];
+                        
+                        // 戻るボタン
+                        if (touchX >= 10 && touchX < 110 && touchY >= 172 && touchY < 212) {
+                            switchScreen(SCREEN_MENU);
+                            bluetoothLastTouched = true;
+                        }
+                        // BLE ON/OFFボタン
+                        else if (touchX >= 90 && touchX < 390 && touchY >= 50 && touchY < 110) {
                             toggleBluetooth();
-                            drawBluetoothStatus();
+                            drawBluetoothSettingsScreen();
+                            bluetoothLastTouched = true;
                         }
-                        currentButtonTouched = true;
-                        buttonHandled = true;
+                    }
+                    
+                    if (event.finger_count == 0) {
+                        bluetoothLastTouched = false;
                     }
                 }
                 
-                // ボタンのタッチ状態を記録
-                lastButtonTouched = currentButtonTouched;
-                
-                // ボタンが押されていなければ、グリッドでマルチタッチを処理
-                if (!buttonHandled) {
-                    grid->handleMultiTouch(event.x, event.y, event.finger_count);
-                    
-                    // HOLDモードの場合のみMIDIノートを送信
-                    if (currentTouchMode == TOUCH_MODE_HOLD) {
-                        sendMidiNotesForChangedCells();
+                // ========================================
+                // About画面の処理
+                // ========================================
+                else if (screen == SCREEN_ABOUT) {
+                    if (event.finger_count > 0 && !aboutLastTouched) {
+                        int16_t touchX = event.x[0];
+                        int16_t touchY = event.y[0];
+                        
+                        // 戻るボタン
+                        if (touchX >= 10 && touchX < 110 && touchY >= 172 && touchY < 212) {
+                            switchScreen(SCREEN_MENU);
+                            aboutLastTouched = true;
+                        }
                     }
                     
-                    // 変更されたセルを再描画
-                    grid->redrawChangedCells();
+                    if (event.finger_count == 0) {
+                        aboutLastTouched = false;
+                    }
                 }
                 
                 // ミューテックスを解放
@@ -521,14 +619,17 @@ void clockTask(void* parameter)
     while (true) {
         // ディスプレイミューテックスを取得（短時間待機）
         if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            // 時計情報を更新
-            GFX_Print_Time_Info_Loop();
-            
-            // Bluetooth接続状態を定期的に更新
-            unsigned long currentMillis = millis();
-            if (currentMillis - lastBleStatusUpdate > 1000) {
-                drawBluetoothStatus();
-                lastBleStatusUpdate = currentMillis;
+            // 画面ごとに更新処理
+            if (currentScreen == SCREEN_DRUMPAD) {
+                // ドラムパッド画面：時計情報を更新
+                GFX_Print_Time_Info_Loop();
+            } else if (currentScreen == SCREEN_BLUETOOTH) {
+                // Bluetooth設定画面：BLE状態を定期更新
+                unsigned long currentMillis = millis();
+                if (currentMillis - lastBleStatusUpdate > 1000) {
+                    drawBluetoothSettingsScreen();
+                    lastBleStatusUpdate = currentMillis;
+                }
             }
             
             // ミューテックスを解放
@@ -571,6 +672,11 @@ bool isTouchInButton(int16_t touchX, int16_t touchY, const ModeButton& btn) {
 
 // MIDI Note On/Off送信関数（ホールドモード専用）
 void sendMidiNotesForChangedCells() {
+    // BLEが起動していない、またはドラムパッド画面でない場合は送信しない
+    if (!bleAdvertising || currentScreen != SCREEN_DRUMPAD) {
+        return;
+    }
+    
     for (int16_t row = 0; row < GRID_ROWS; row++) {
         for (int16_t col = 0; col < GRID_COLS; col++) {
             int16_t index = row * GRID_COLS + col;
@@ -763,6 +869,195 @@ void onBLEDisconnected() {
     if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         drawBluetoothStatus();
         xSemaphoreGive(displayMutex);
+    }
+}
+
+// メニュー画面描画
+void drawMenuScreen() {
+    gfx->fillScreen(BLACK);
+    
+    // タイトル
+    gfx->setTextSize(3);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(160, 5);
+    gfx->print("QUROSPAD");
+    
+    // メニューボタン
+    for (int i = 0; i < 3; i++) {
+        MenuItem& item = menuItems[i];
+        
+        // ボタン背景
+        uint16_t color = 0x4208;  // ダークグレー
+        gfx->fillRoundRect(item.x, item.y, item.width, item.height, 5, color);
+        
+        // ボタン枠
+        gfx->drawRoundRect(item.x, item.y, item.width, item.height, 5, WHITE);
+        gfx->drawRoundRect(item.x+1, item.y+1, item.width-2, item.height-2, 5, WHITE);
+        
+        // ラベル
+        gfx->setTextSize(2);
+        gfx->setTextColor(WHITE);
+        int16_t textWidth = strlen(item.label) * 12;
+        gfx->setCursor(item.x + (item.width - textWidth) / 2, item.y + 18);
+        gfx->print(item.label);
+    }
+}
+
+// ドラムパッド画面描画
+void drawDrumPadScreen() {
+    gfx->fillScreen(WHITE);
+    
+    // グリッドを描画
+    grid->draw();
+    
+    // モード切り替えボタンを描画
+    drawModeButton();
+    
+    // 戻るボタン（左下）
+    gfx->fillRoundRect(10, 172, 100, 40, 5, 0xF800);  // 赤
+    gfx->drawRoundRect(10, 172, 100, 40, 5, WHITE);
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(30, 185);
+    gfx->print("BACK");
+}
+
+// Bluetooth設定画面描画
+void drawBluetoothSettingsScreen() {
+    gfx->fillScreen(BLACK);
+    
+    // タイトル
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(10, 10);
+    gfx->print("Bluetooth Settings");
+    
+    // BLE ON/OFFボタン（大きめ）
+    int16_t btnX = 90;
+    int16_t btnY = 50;
+    int16_t btnW = 300;
+    int16_t btnH = 60;
+    
+    uint16_t bgColor;
+    const char* statusText;
+    
+    if (bleConnected) {
+        bgColor = 0x07E0;      // 緑
+        statusText = "CONNECTED";
+    } else if (bleAdvertising) {
+        bgColor = 0xFFE0;      // 黄色
+        statusText = "WAITING...";
+    } else {
+        bgColor = 0xF800;      // 赤
+        statusText = "BLE OFF";
+    }
+    
+    gfx->fillRoundRect(btnX, btnY, btnW, btnH, 5, bgColor);
+    gfx->drawRoundRect(btnX, btnY, btnW, btnH, 5, WHITE);
+    gfx->setTextSize(3);
+    gfx->setTextColor(BLACK);
+    int16_t textWidth = strlen(statusText) * 18;
+    gfx->setCursor(btnX + (btnW - textWidth) / 2, btnY + 20);
+    gfx->print(statusText);
+    
+    // デバイス名
+    gfx->setTextSize(1);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(btnX, btnY + btnH + 10);
+    gfx->print("Device Name: Qurospad");
+    
+    // タップして切り替え説明
+    gfx->setCursor(btnX, btnY + btnH + 25);
+    gfx->print("Tap button to toggle BLE");
+    
+    // 戻るボタン
+    gfx->fillRoundRect(10, 172, 100, 40, 5, 0xF800);
+    gfx->drawRoundRect(10, 172, 100, 40, 5, WHITE);
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(30, 185);
+    gfx->print("BACK");
+}
+
+// About画面描画
+void drawAboutScreen() {
+    gfx->fillScreen(BLACK);
+    
+    // タイトル
+    gfx->setTextSize(3);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(180, 10);
+    gfx->print("ABOUT");
+    
+    // 情報表示
+    gfx->setTextSize(2);
+    gfx->setCursor(10, 50);
+    gfx->print("QUROSPAD");
+    
+    gfx->setTextSize(1);
+    gfx->setCursor(10, 75);
+    gfx->print("BLE-MIDI Controller");
+    
+    gfx->setCursor(10, 90);
+    gfx->print("Firmware: v1.0");
+    
+    gfx->setCursor(10, 105);
+    gfx->print("Board: ESP32-S3");
+    
+    gfx->setCursor(10, 120);
+    gfx->print("Display: 480x222");
+    
+    gfx->setCursor(10, 135);
+    gfx->print("Grid: 4x4 Touch Pads");
+    
+    gfx->setCursor(10, 150);
+    gfx->print("MIDI Notes: 60-75 (C4-D#5)");
+    
+    // 戻るボタン
+    gfx->fillRoundRect(10, 172, 100, 40, 5, 0xF800);
+    gfx->drawRoundRect(10, 172, 100, 40, 5, WHITE);
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(30, 185);
+    gfx->print("BACK");
+}
+
+// 画面切り替え
+void switchScreen(ScreenMode newScreen) {
+    // ドラムパッド画面から離れる場合、グリッド状態をクリア
+    if (currentScreen == SCREEN_DRUMPAD && newScreen != SCREEN_DRUMPAD) {
+        Serial.println("Clearing drumpad state...");
+        
+        // すべてのセルを非アクティブに
+        grid->clearAllActive();
+        grid->clearAllTouches();
+        
+        // MIDI状態をリセット
+        for (int i = 0; i < GRID_ROWS * GRID_COLS; i++) {
+            prevCellState[i] = false;
+        }
+    }
+    
+    currentScreen = newScreen;
+    
+    Serial.print("Switching to screen: ");
+    switch(newScreen) {
+        case SCREEN_MENU:
+            Serial.println("MENU");
+            drawMenuScreen();
+            break;
+        case SCREEN_DRUMPAD:
+            Serial.println("DRUMPAD");
+            drawDrumPadScreen();
+            break;
+        case SCREEN_BLUETOOTH:
+            Serial.println("BLUETOOTH");
+            drawBluetoothSettingsScreen();
+            break;
+        case SCREEN_ABOUT:
+            Serial.println("ABOUT");
+            drawAboutScreen();
+            break;
     }
 }
 

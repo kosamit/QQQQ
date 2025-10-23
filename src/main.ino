@@ -302,6 +302,21 @@ void setup()
     // FreeRTOS タスクの作成
     BaseType_t result;
     
+    // ディスプレイ更新タスク (優先度: 最高 - 画面更新を最優先)
+    result = xTaskCreatePinnedToCore(
+        displayTask,         // タスク関数
+        "DisplayTask",       // タスク名
+        8192,                // スタックサイズ (大きめ)
+        NULL,                // パラメータ
+        4,                   // 優先度 (最高)
+        &displayTaskHandle,  // タスクハンドル
+        1                    // コア1で実行
+    );
+    if (result != pdPASS) {
+        Serial.println("ディスプレイタスクの作成に失敗しました");
+        while(1);
+    }
+    
     // タッチ処理タスク (優先度: 高)
     result = xTaskCreatePinnedToCore(
         touchTask,           // タスク関数
@@ -310,21 +325,6 @@ void setup()
         NULL,                // パラメータ
         3,                   // 優先度 (高)
         &touchTaskHandle,    // タスクハンドル
-        1                    // コア1で実行
-    );
-    if (result != pdPASS) {
-        Serial.println("タッチタスクの作成に失敗しました");
-        while(1);
-    }
-    
-    // ディスプレイ更新タスク (優先度: 中)
-    result = xTaskCreatePinnedToCore(
-        displayTask,         // タスク関数
-        "DisplayTask",       // タスク名
-        8192,                // スタックサイズ (大きめ)
-        NULL,                // パラメータ
-        2,                   // 優先度 (中)
-        &displayTaskHandle,  // タスクハンドル
         1                    // コア1で実行
     );
     if (result != pdPASS) {
@@ -350,18 +350,18 @@ void setup()
     Serial.println("FreeRTOS タスクが正常に開始されました");
 }
 
-// タッチ処理タスク（割り込み駆動・マルチタッチ対応）
+// タッチ処理タスク（割り込み駆動・マルチタッチ対応・高速化版）
 void touchTask(void* parameter)
 {
-    Serial.println("タッチタスク開始（割り込み駆動・マルチタッチ対応）");
+    Serial.println("タッチタスク開始（高速化モード）");
     
     while (true) {
         // 割り込みからの通知を待機
         uint32_t notificationValue = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
         if (notificationValue > 0) {
-            // 少し待ってから読み取り（デバウンス）
-            vTaskDelay(pdMS_TO_TICKS(20));
+            // 少し待ってから読み取り（デバウンス: 3ms = 最高速化）
+            vTaskDelay(pdMS_TO_TICKS(3));
             
             // タッチ情報を更新
             Update_Touch_Info();
@@ -376,20 +376,8 @@ void touchTask(void* parameter)
                 event.y[i] = global_touch_info.touch_y[i];
             }
             
-            // デバッグ出力
-            if (event.finger_count > 0) {
-                Serial.printf("マルチタッチ: %d本\n", event.finger_count);
-                for (int i = 0; i < event.finger_count; i++) {
-                    Serial.printf("  指%d: X=%d, Y=%d\n", i+1, event.x[i], event.y[i]);
-                }
-            } else {
-                Serial.println("タッチ終了");
-            }
-            
             // キューにイベントを送信
-            if (xQueueSend(touchEventQueue, &event, 0) != pdTRUE) {
-                Serial.println("タッチイベントキューが満杯です");
-            }
+            xQueueSend(touchEventQueue, &event, 0);
             
             // 割り込みフラグをクリア
             CST226SE->IIC_Interrupt_Flag = false;
@@ -406,12 +394,10 @@ void displayTask(void* parameter)
     static bool lastButtonTouched = false;  // 前回ボタンがタッチされていたか
     
     while (true) {
-        // キューからタッチイベントを受信 (最大100ms待機)
-        if (xQueueReceive(touchEventQueue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
-            Serial.printf("ディスプレイタスク: %d本の指を検出\n", event.finger_count);
-            
-            // ディスプレイミューテックスを取得
-            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // キューからタッチイベントを受信 (最大1ms待機 = 最高速ポーリング)
+        if (xQueueReceive(touchEventQueue, &event, pdMS_TO_TICKS(1)) == pdTRUE) {
+            // ディスプレイミューテックスを取得（即座に取得）
+            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
                 bool buttonHandled = false;
                 bool currentButtonTouched = false;
                 
@@ -420,21 +406,17 @@ void displayTask(void* parameter)
                     isTouchInButton(event.x[0], event.y[0], modeButton)) {
                     currentButtonTouched = true;
                     
-                    // 新しくボタンがタッチされた（前回はタッチされていなかった）場合のみ切り替え
+                    // 新しくボタンがタッチされた場合のみ切り替え
                     if (!lastButtonTouched) {
                         // タッチモードを切り替え
                         if (currentTouchMode == TOUCH_MODE_TOGGLE) {
                             currentTouchMode = TOUCH_MODE_HOLD;
-                            Serial.println("モード変更: HOLD");
                         } else {
                             currentTouchMode = TOUCH_MODE_TOGGLE;
-                            Serial.println("モード変更: TOGGLE");
                         }
                         
                         grid->setTouchMode(currentTouchMode);
                         drawModeButton();
-                    } else {
-                        Serial.println("ボタン長押し中 - 何もしない");
                     }
                     
                     buttonHandled = true;
@@ -449,16 +431,10 @@ void displayTask(void* parameter)
                     
                     // 変更されたセルを再描画
                     grid->redrawChangedCells();
-                    
-                    // アクティブなセルの数を表示
-                    int16_t activeCount = grid->getActiveCellCount();
-                    Serial.printf("アクティブセル数: %d\n", activeCount);
                 }
                 
                 // ミューテックスを解放
                 xSemaphoreGive(displayMutex);
-            } else {
-                Serial.println("ディスプレイミューテックスの取得に失敗しました");
             }
         }
     }
@@ -473,8 +449,8 @@ void clockTask(void* parameter)
     const TickType_t updateInterval = pdMS_TO_TICKS(1000); // 1秒間隔
     
     while (true) {
-        // ディスプレイミューテックスを取得
-        if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // ディスプレイミューテックスを取得（短時間待機）
+        if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             // 時計情報を更新
             GFX_Print_Time_Info_Loop();
             

@@ -172,15 +172,9 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
             if (!_lastTouchState || _lastTouchedRow != currentRow || _lastTouchedCol != currentCol) {
                 if (_touchMode == TOUCH_MODE_TOGGLE) {
                     // 切り替えモード：タッチでアクティブ/非アクティブを切り替え
-                    bool oldState = _cells[index].isActive;
                     _cells[index].isActive = !_cells[index].isActive;
                     _cells[index].fillColor = _cells[index].isActive ? _activeColor : _inactiveColor;
                     _cells[index].needsRedraw = true;  // 再描画が必要
-                    
-                    Serial.printf("セル[%d,%d] トグル: %s → %s\n", 
-                                  currentRow, currentCol, 
-                                  oldState ? "ON" : "OFF", 
-                                  _cells[index].isActive ? "ON" : "OFF");
                 } else {
                     // ホールドモード：タッチ中のみアクティブ
                     
@@ -191,21 +185,13 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
                         _cells[lastIndex].isActive = false;
                         _cells[lastIndex].fillColor = _inactiveColor;
                         _cells[lastIndex].needsRedraw = true;
-                        
-                        Serial.printf("HOLDモード: セル[%d,%d]を非アクティブ化\n", 
-                                      _lastTouchedRow, _lastTouchedCol);
                     }
                     
                     // 現在のセルをアクティブに
                     _cells[index].isActive = true;
                     _cells[index].fillColor = _activeColor;
                     _cells[index].needsRedraw = true;  // 再描画が必要
-                    
-                    Serial.printf("HOLDモード: セル[%d,%d]をアクティブ化\n", 
-                                  currentRow, currentCol);
                 }
-            } else {
-                Serial.printf("セル[%d,%d] 同じセルの連続タッチ - スキップ\n", currentRow, currentCol);
             }
             
             // 現在のタッチ状態を記録
@@ -215,8 +201,6 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
         } else {
             // タッチ終了
             _cells[index].isTouched = false;
-            
-            Serial.printf("セル[%d,%d] タッチ終了\n", currentRow, currentCol);
             
             if (_touchMode == TOUCH_MODE_HOLD) {
                 // ホールドモード：タッチ終了で非アクティブに戻す
@@ -241,9 +225,6 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
                 _cells[lastIndex].isActive = false;
                 _cells[lastIndex].fillColor = _inactiveColor;
                 _cells[lastIndex].needsRedraw = true;
-                
-                Serial.printf("HOLDモード: グリッド外にスライド - セル[%d,%d]を非アクティブ化\n", 
-                              _lastTouchedRow, _lastTouchedCol);
             }
             
             // タッチ状態をリセット
@@ -256,17 +237,10 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
     return handled;
 }
 
-// マルチタッチ対応の処理（シンプル版）
+// マルチタッチ対応の処理（シンプル版・高速化）
 void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerCount) {
-    // デバッグ: タッチ座標を出力
-    Serial.printf("handleMultiTouch: %d本の指\n", fingerCount);
-    for (uint8_t i = 0; i < fingerCount && i < 5; i++) {
-        Serial.printf("  指%d: (%d, %d)\n", i+1, touchX[i], touchY[i]);
-    }
-    
     // 現在タッチされているセルを記録
     bool cellTouched[GRID_TOTAL_CELLS] = {false};
-    int touchedCellCount = 0;
     
     for (uint8_t i = 0; i < fingerCount && i < 5; i++) {
         if (touchX[i] > 0 && touchY[i] > 0) {
@@ -277,8 +251,6 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
                         int16_t index = getCellIndex(row, col);
                         if (!cellTouched[index]) {
                             cellTouched[index] = true;
-                            touchedCellCount++;
-                            Serial.printf("  指%d: セル[%d,%d] タッチ\n", i+1, row, col);
                         }
                         break;
                     }
@@ -289,8 +261,6 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
     
     if (_touchMode == TOUCH_MODE_HOLD) {
         // HOLDモード：タッチされているセルだけをアクティブにする
-        Serial.printf("HOLDモード: %dセルをタッチ検出\n", touchedCellCount);
-        
         for (int16_t i = 0; i < GRID_TOTAL_CELLS; i++) {
             bool shouldBeActive = cellTouched[i];
             
@@ -298,11 +268,6 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
                 _cells[i].isActive = shouldBeActive;
                 _cells[i].fillColor = shouldBeActive ? _activeColor : _inactiveColor;
                 _cells[i].needsRedraw = true;
-                
-                int16_t row = i / GRID_COLS;
-                int16_t col = i % GRID_COLS;
-                Serial.printf("HOLDモード: セル[%d,%d] → %s\n", 
-                              row, col, shouldBeActive ? "ON" : "OFF");
             }
         }
     } else {
@@ -315,11 +280,6 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
                 _cells[i].isActive = !_cells[i].isActive;
                 _cells[i].fillColor = _cells[i].isActive ? _activeColor : _inactiveColor;
                 _cells[i].needsRedraw = true;
-                
-                int16_t row = i / GRID_COLS;
-                int16_t col = i % GRID_COLS;
-                Serial.printf("TOGGLEモード: セル[%d,%d] トグル → %s\n", 
-                              row, col, _cells[i].isActive ? "ON" : "OFF");
             }
         }
         

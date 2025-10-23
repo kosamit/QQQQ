@@ -49,16 +49,21 @@ void Update_Touch_Info()
     global_touch_info.touch_y[4] = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH5_COORDINATE_Y);
     global_touch_info.fingers_number = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_FINGER_NUMBER);
     
-    // Debug output to check raw values (uncomment if needed for debugging)
-    // Serial.printf("Raw values - Fingers: %d, X1: %d, Y1: %d, X2: %d, Y2: %d\n", 
-    //               global_touch_info.fingers_number,
-    //               global_touch_info.touch_x[0], global_touch_info.touch_y[0],
-    //               global_touch_info.touch_x[1], global_touch_info.touch_y[1]);
+    // Debug output to check raw values
+    if (global_touch_info.fingers_number > 0) {
+        Serial.printf("Raw: Fingers=%d ", global_touch_info.fingers_number);
+        for (int i = 0; i < global_touch_info.fingers_number && i < 5; i++) {
+            Serial.printf("T%d:(%d,%d) ", i+1, 
+                          global_touch_info.touch_x[i], global_touch_info.touch_y[i]);
+        }
+        Serial.println();
+    }
     
-    // Filter out invalid coordinates (8 seems to be a default/invalid value)
+    // Filter out invalid coordinates
+    // 座標が0以下、または明らかに範囲外の場合のみ無効とする
     for (int i = 0; i < 5; i++) {
-        if (global_touch_info.touch_x[i] == 8 || global_touch_info.touch_y[i] == 8 ||
-            global_touch_info.touch_x[i] <= 0 || global_touch_info.touch_y[i] <= 0) {
+        if (global_touch_info.touch_x[i] <= 0 || global_touch_info.touch_y[i] <= 0 ||
+            global_touch_info.touch_x[i] > 300 || global_touch_info.touch_y[i] > 500) {
             global_touch_info.touch_x[i] = 0;
             global_touch_info.touch_y[i] = 0;
         }

@@ -258,8 +258,15 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
 
 // マルチタッチ対応の処理（シンプル版）
 void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerCount) {
+    // デバッグ: タッチ座標を出力
+    Serial.printf("handleMultiTouch: %d本の指\n", fingerCount);
+    for (uint8_t i = 0; i < fingerCount && i < 5; i++) {
+        Serial.printf("  指%d: (%d, %d)\n", i+1, touchX[i], touchY[i]);
+    }
+    
     // 現在タッチされているセルを記録
     bool cellTouched[GRID_TOTAL_CELLS] = {false};
+    int touchedCellCount = 0;
     
     for (uint8_t i = 0; i < fingerCount && i < 5; i++) {
         if (touchX[i] > 0 && touchY[i] > 0) {
@@ -268,7 +275,11 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
                 for (int16_t col = 0; col < GRID_COLS; col++) {
                     if (isPointInCell(touchX[i], touchY[i], row, col)) {
                         int16_t index = getCellIndex(row, col);
-                        cellTouched[index] = true;
+                        if (!cellTouched[index]) {
+                            cellTouched[index] = true;
+                            touchedCellCount++;
+                            Serial.printf("  指%d: セル[%d,%d] タッチ\n", i+1, row, col);
+                        }
                         break;
                     }
                 }
@@ -278,6 +289,8 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
     
     if (_touchMode == TOUCH_MODE_HOLD) {
         // HOLDモード：タッチされているセルだけをアクティブにする
+        Serial.printf("HOLDモード: %dセルをタッチ検出\n", touchedCellCount);
+        
         for (int16_t i = 0; i < GRID_TOTAL_CELLS; i++) {
             bool shouldBeActive = cellTouched[i];
             
@@ -285,6 +298,11 @@ void Grid4x4::handleMultiTouch(int16_t* touchX, int16_t* touchY, uint8_t fingerC
                 _cells[i].isActive = shouldBeActive;
                 _cells[i].fillColor = shouldBeActive ? _activeColor : _inactiveColor;
                 _cells[i].needsRedraw = true;
+                
+                int16_t row = i / GRID_COLS;
+                int16_t col = i % GRID_COLS;
+                Serial.printf("HOLDモード: セル[%d,%d] → %s\n", 
+                              row, col, shouldBeActive ? "ON" : "OFF");
             }
         }
     } else {

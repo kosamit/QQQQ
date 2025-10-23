@@ -183,9 +183,26 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
                                   _cells[index].isActive ? "ON" : "OFF");
                 } else {
                     // ホールドモード：タッチ中のみアクティブ
+                    
+                    // 前回のセルを非アクティブに（スライドで別のセルに移動した場合）
+                    if (_lastTouchState && _lastTouchedRow >= 0 && _lastTouchedCol >= 0 &&
+                        (_lastTouchedRow != currentRow || _lastTouchedCol != currentCol)) {
+                        int16_t lastIndex = getCellIndex(_lastTouchedRow, _lastTouchedCol);
+                        _cells[lastIndex].isActive = false;
+                        _cells[lastIndex].fillColor = _inactiveColor;
+                        _cells[lastIndex].needsRedraw = true;
+                        
+                        Serial.printf("HOLDモード: セル[%d,%d]を非アクティブ化\n", 
+                                      _lastTouchedRow, _lastTouchedCol);
+                    }
+                    
+                    // 現在のセルをアクティブに
                     _cells[index].isActive = true;
                     _cells[index].fillColor = _activeColor;
                     _cells[index].needsRedraw = true;  // 再描画が必要
+                    
+                    Serial.printf("HOLDモード: セル[%d,%d]をアクティブ化\n", 
+                                  currentRow, currentCol);
                 }
             } else {
                 Serial.printf("セル[%d,%d] 同じセルの連続タッチ - スキップ\n", currentRow, currentCol);
@@ -215,8 +232,21 @@ bool Grid4x4::handleTouch(int16_t touchX, int16_t touchY, bool isPressed) {
             _lastTouchedCol = -1;
         }
     } else {
-        // グリッド外のタッチの場合、前回のタッチ状態をリセット
-        if (_lastTouchState) {
+        // グリッド外のタッチの場合
+        if (_lastTouchState && isPressed) {
+            // HOLDモードで、タッチしたままグリッド外に出た場合
+            if (_touchMode == TOUCH_MODE_HOLD && _lastTouchedRow >= 0 && _lastTouchedCol >= 0) {
+                // 前回アクティブだったセルを非アクティブに戻す
+                int16_t lastIndex = getCellIndex(_lastTouchedRow, _lastTouchedCol);
+                _cells[lastIndex].isActive = false;
+                _cells[lastIndex].fillColor = _inactiveColor;
+                _cells[lastIndex].needsRedraw = true;
+                
+                Serial.printf("HOLDモード: グリッド外にスライド - セル[%d,%d]を非アクティブ化\n", 
+                              _lastTouchedRow, _lastTouchedCol);
+            }
+            
+            // タッチ状態をリセット
             _lastTouchState = false;
             _lastTouchedRow = -1;
             _lastTouchedCol = -1;

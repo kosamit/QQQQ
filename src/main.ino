@@ -65,6 +65,28 @@ std::unique_ptr<Arduino_IIC> PCF85063(new Arduino_PCF85063(IIC_Bus, PCF85063_DEV
 // グリッドオブジェクト
 Grid4x4* grid;
 
+// モード切り替えボタンの定義
+struct ModeButton {
+    int16_t x;
+    int16_t y;
+    int16_t width;
+    int16_t height;
+    const char* label_toggle;
+    const char* label_hold;
+};
+
+ModeButton modeButton = {
+    50,                // x: グリッドと同じX位置
+    320,               // y: グリッドの下
+    240,               // width: グリッドと同じ幅
+    40,                // height: ボタンの高さ
+    "Mode: TOGGLE",    // label_toggle
+    "Mode: HOLD"       // label_hold
+};
+
+// 現在のタッチモード
+TouchMode currentTouchMode = TOUCH_MODE_TOGGLE;
+
 // FreeRTOS オブジェクト
 TaskHandle_t touchTaskHandle = NULL;
 TaskHandle_t displayTaskHandle = NULL;
@@ -84,6 +106,10 @@ struct TouchEvent {
 void touchTask(void* parameter);
 void displayTask(void* parameter);
 void clockTask(void* parameter);
+
+// ボタン関連関数の前方宣言
+void drawModeButton();
+bool isTouchInButton(int16_t touchX, int16_t touchY, const ModeButton& btn);
 
 void Arduino_IIC_Touch_Interrupt(void)
 {
@@ -253,6 +279,9 @@ void setup()
     // グリッドを描画
     grid->draw();
     
+    // モード切り替えボタンを描画
+    drawModeButton();
+    
     Serial.println("4x4 Grid initialized");
     
     // FreeRTOS オブジェクトの初期化
@@ -395,15 +424,36 @@ void displayTask(void* parameter)
             
             // ディスプレイミューテックスを取得
             if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                bool handled = false;
+                
+                // モード切り替えボタンのタッチを処理（タッチ開始時のみ）
+                if (event.is_pressed && isTouchInButton(event.x, event.y, modeButton)) {
+                    // タッチモードを切り替え
+                    if (currentTouchMode == TOUCH_MODE_TOGGLE) {
+                        currentTouchMode = TOUCH_MODE_HOLD;
+                        Serial.println("モード変更: HOLD");
+                    } else {
+                        currentTouchMode = TOUCH_MODE_TOGGLE;
+                        Serial.println("モード変更: TOGGLE");
+                    }
+                    
+                    grid->setTouchMode(currentTouchMode);
+                    drawModeButton();
+                    handled = true;
+                }
+                
                 // グリッドでタッチを処理
-                if (grid->handleTouch(event.x, event.y, event.is_pressed)) {
+                if (!handled && grid->handleTouch(event.x, event.y, event.is_pressed)) {
                     // アクティブなセルの数を表示
                     int16_t activeCount = grid->getActiveCellCount();
                     Serial.printf("アクティブセル数: %d\n", activeCount);
                     
                     // 変更されたセルだけを再描画
                     grid->redrawChangedCells();
-                } else {
+                    handled = true;
+                }
+                
+                if (!handled) {
                     Serial.println("グリッド外のタッチ");
                 }
                 
@@ -437,6 +487,35 @@ void clockTask(void* parameter)
         // 次の更新まで待機
         vTaskDelayUntil(&lastWakeTime, updateInterval);
     }
+}
+
+// モード切り替えボタンを描画
+void drawModeButton() {
+    // ボタンの背景を描画
+    uint16_t bgColor = (currentTouchMode == TOUCH_MODE_TOGGLE) ? 0x2104 : 0x8C51; // モードに応じて色を変える
+    gfx->fillRect(modeButton.x, modeButton.y, modeButton.width, modeButton.height, bgColor);
+    
+    // ボタンの枠を描画
+    gfx->drawRect(modeButton.x, modeButton.y, modeButton.width, modeButton.height, WHITE);
+    gfx->drawRect(modeButton.x + 1, modeButton.y + 1, modeButton.width - 2, modeButton.height - 2, WHITE);
+    
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    
+    // テキストを中央に配置
+    const char* label = (currentTouchMode == TOUCH_MODE_TOGGLE) ? modeButton.label_toggle : modeButton.label_hold;
+    int16_t textWidth = strlen(label) * 12;  // 概算の幅
+    int16_t textX = modeButton.x + (modeButton.width - textWidth) / 2;
+    int16_t textY = modeButton.y + (modeButton.height - 16) / 2;
+    
+    gfx->setCursor(textX, textY);
+    gfx->print(label);
+}
+
+// ボタンがタッチされたか判定
+bool isTouchInButton(int16_t touchX, int16_t touchY, const ModeButton& btn) {
+    return (touchX >= btn.x && touchX < btn.x + btn.width &&
+            touchY >= btn.y && touchY < btn.y + btn.height);
 }
 
 void loop()

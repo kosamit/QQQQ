@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git checkout:*)",
-      "Bash(pio run:*)"
+      "Bash(pio run:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/kosamit/Gist/esp32/QQQQ/tests/tests/**)",
+      "Bash(done)"
     ]
   }
 }

@@ -242,6 +242,26 @@ T-Display-S3-Pro-MVSRBoard_V1.0を使っています。
 
 ## 関連テスト
 
+### ハードウェアテスト（Original_Test）の実行方法
+
+`tests/` ディレクトリには工場出荷テスト（タッチ・振動・RTC・マイク・SD・WiFi・音楽）が含まれています。実行するには `platformio.ini` を以下のように変更してください。
+
+1. `src_dir` を `tests` に変更する
+2. `default_envs` を `Original_Test` にする
+
+```ini
+[platformio]
+boards_dir = ./boards
+lib_dir = ./libraries
+
+src_dir = tests          ; ← src から tests に変更
+default_envs = Original_Test
+```
+
+変更後、通常どおりビルド・書き込みを行えばテストが実行されます。
+
+> **注意:** テスト実行後は `src_dir = src` に戻してください。通常のファームウェア（`main.ino`）とテストは排他的です。
+
 ### 消費電力
 
 | ファームウェア                                                                                                        | プログラム                                          | 説明                                                                                                                                            | 画像 |

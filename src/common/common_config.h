@@ -50,9 +50,6 @@
 #define SD_FILE_NAME_TEMP "/music_temp.mp3"
 #define SD_FILE_SIZE 3638546
 
-// File Download URL
-extern const char *fileDownloadUrl;
-
 // Global Variables
 extern bool Wifi_Connection_Flag;
 extern bool SD_Initialization_Flag;

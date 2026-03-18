@@ -13,7 +13,7 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include <BLEMIDI_Transport.h>
-#include <hardware/BLEMIDI_ESP32.h>
+#include <hardware/BLEMIDI_ESP32_NimBLE.h>
 
 // 画面モード定義
 enum ScreenMode {
@@ -59,7 +59,7 @@ struct TouchEvent {
 };
 
 // BLE-MIDI インスタンス（BLEMIDI_CREATE_INSTANCE マクロで main.ino に定義）
-typedef bleMidi::BLEMIDI_Transport<bleMidi::BLEMIDI_ESP32<bleMidi::DefaultSettings>, bleMidi::DefaultSettings> BleMidiTransport;
+typedef bleMidi::BLEMIDI_Transport<bleMidi::BLEMIDI_ESP32_NimBLE<bleMidi::DefaultSettings>, bleMidi::DefaultSettings> BleMidiTransport;
 typedef midi::MidiInterface<BleMidiTransport, bleMidi::MySettings> BleMidiInterface;
 
 extern BleMidiTransport BLEMIDI;

@@ -1,245 +1,268 @@
 <!--
  * @Description: None
- * @Author: LILYGO_L
- * @Date: 2023-09-11 16:13:14
- * @LastEditTime: 2025-02-14 14:40:34
- * @License: GPL 3.0
+ * @Author: kosamit
+ * @Date: 2026-03-18 23:00:00
+ * @LastEditTime: 2026-03-18 23:00:00
 -->
-<h1 align = "center">T-Display-S3-Pro-MVSRBoard</h1>
+<h1 align = "center">QQQQ</h1>
 
-## **English | [中文](./README_CN.md)**
+## バージョン履歴
 
-## VersionIteration:
-| Version                               | Update date                       |Update description|
-| :-------------------------------: | :-------------------------------: |:--------------: |
-| T-Display-S3-Pro-MVSRBoard_V1.0                      | 2024-09-13                    |   Original version      |
-| T-Display-S3-Pro-MVSRBoard_V1.1                      | 2024-12-03                    |    Replace microphone model   |
+| バージョン |   更新日   |     更新内容     |
+| :--------: | :--------: | :--------------: |
+|    V0.1    | 2026-03-18 | テストモジュール |
 
-## PurchaseLink
+## 目次
 
-| Product                     | SOC           |  FLASH  |  PSRAM   | Link                   |
-| :------------------------: | :-----------: |:-------: | :---------: | :------------------: |
-| T-Display-S3-Pro-MVSRBoard_V1.0   | NULL |   NULL   | NULL |  [NULL]()   |
+- [概要](#概要)
+- [ドライバー・ソフトウェア構成](#ドライバーソフトウェア構成)
+- [プレビュー](#プレビュー)
+- [モジュール](#モジュール)
+- [ソフトウェア導入](#ソフトウェア導入)
+- [ピン一覧](#ピン一覧)
+- [関連テスト](#関連テスト)
+- [よくある質問](#よくある質問)
+- [プロジェクト](#プロジェクト)
 
-## Directory
-- [Describe](#describe)
-- [Preview](#preview)
-- [Module](#module)
-- [SoftwareDeployment](#SoftwareDeployment)
-- [PinOverview](#pinoverview)
-- [RelatedTests](#RelatedTests)
-- [FAQ](#faq)
-- [Project](#project)
+## 概要
 
-## Describe
+QQQQ(Quad Q)はポケットサイズのドラムパッドを持ったMIDIデバイスです。
+T-Display-S3-Pro-MVSRBoardでプロトタイプの開発を行っています。
 
-The T-Display-S3-Pro-MVSRBoard is the backplate design for the [T-Display-S3-Pro](https://github.com/Xinyuan-LilyGO/T-Display-S3-Pro) motherboard, featuring onboard speaker and microphone expansion with extremely low static current. Additionally, it includes vibration and RTC (Real-Time Clock) functions.
+T-Display-S3-Pro-MVSRBoard は [T-Display-S3-Pro](https://github.com/Xinyuan-LilyGO/T-Display-S3-Pro) マザーボード用のバックプレートで、オンボードスピーカーとマイクを極めて低い静止電流で拡張できます。加えて、振動と RTC（リアルタイムクロック）機能を備えています。
 
-## Preview
+T-Display-S3-Pro-MVSRBoard_V1.0を使っています。
 
-### Actual Product Image
+**ランタイム:** 本プロジェクトでは **FreeRTOS** をリアルタイム OS として採用しています（ESP32-S3 上の ESP-IDF / Arduino フレームワーク経由）。マルチタスクは FreeRTOS のタスク（タッチ・表示・クロックなど）と同期プリミティブ（キュー、セマフォ）で実装されています。
 
-## Module
+## ドライバー・ソフトウェア構成
 
-### 1. Speaker
+本プロジェクトで使用するディスプレイ・周辺ドライバーおよび主要ライブラリの一覧です。
 
-* Chip: MAX98357A
-* Bus communication protocol: IIS
-* Other: Default using 9dB gain
-* Related documentation: 
-    >[MAX98357A](./information/MAX98357AETE+T.pdf)
-* Dependent libraries: 
-    >[Arduino_DriveBus-1.1.16]()
+| カテゴリ             | ハードウェア / 機能                                 | ドライバー / ライブラリ             | バス / インターフェース                           |
+| :------------------- | :-------------------------------------------------- | :---------------------------------- | :------------------------------------------------ |
+| **OS / ランタイム**  | タスクスケジューリング、同期                        | FreeRTOS (ESP-IDF)                  | —                                                 |
+| **ディスプレイ**     | LCD (ST7796, 222×480)                               | Arduino_GFX (Arduino_ST7796)        | SPI (Arduino_HWSPI: DC, CS, SCK, MOSI, MISO, RST) |
+| **タッチ**           | 静電容量式タッチ (CST226SE)                         | Arduino_DriveBus (Arduino_CST2xxSE) | I2C (Arduino_HWIIC)、RST、INT                     |
+| **スピーカー**       | MAX98357A (I2S DAC/アンプ)                          | ESP32-audioI2S (Audio)              | I2S (BCLK, LRCLK, DATA, SD_MODE)                  |
+| **マイク**           | V1.0: MSM261S4030H0R (I2S) / V1.1: MP34DT05-A (PDM) | Arduino_DriveBus (Arduino_MEMS)     | I2S/PDM (BCLK, WS/LRCLK, DATA, EN)                |
+| **RTC**              | PCF85063ATL                                         | Arduino_DriveBus (Arduino_PCF85063) | I2C (SDA, SCL)、INT                               |
+| **電源 / バッテリ**  | SY6970 (充電・ADC)                                  | Arduino_DriveBus (Arduino_SY6970)   | I2C                                               |
+| **振動**             | 振動モーター                                        | ESP32 LEDC (PWM)                    | GPIO 45                                           |
+| **ディスプレイ電源** | RT9080 (LDO)                                        | GPIO                                | EN → GPIO 42                                      |
+| **SDカード**         | SDスロット                                          | Arduino SD / SPI                    | SPI (CS, MISO, MOSI, SCK)                         |
+| **BLE MIDI**         | Bluetooth LE MIDI                                   | BLE-MIDI (Arduino-BLE-MIDI)         | BLE                                               |
 
-### 2. Microphone
+- **ディスプレイ:** ST7796 を Arduino_GFX で HW SPI 駆動。解像度 222×480、IPS。
+- **FreeRTOS:** タッチ・表示・クロック用タスク、キュー、ミューテックスに使用。Arduino の `setup()` / `loop()` は Core 1 で実行。
 
-> #### T-Display-S3-Pro-MVSRBoard_V1.0 version
-> * Chip: MSM261S4030H0R
-> * Bus communication protocol: IIS
-> * Related documentation: 
->    >[MSM261S4030H0R](./information/MEMSensing-MSM261S4030H0R.pdf)
-> * Dependent libraries: 
->     >[Arduino_DriveBus-1.1.16]()
+## プレビュー
 
-> #### T-Display-S3-Pro-MVSRBoard_V1.1 version
-> * Chip: MP34DT05-A
-> * Bus communication protocol: PDM
-> * Related documentation: 
->    >[MP34DT05-A](./information/mp34dt05-a.pdf)
-> * Dependent libraries: 
->    >[Arduino_DriveBus-1.1.16]()
+### 実機画像
 
-### 3. Vibration
+## モジュール
 
-* Bus communication protocol: PWM
+### 1. スピーカー
+
+- チップ: MAX98357A
+- バス通信プロトコル: I2S
+- その他: デフォルトで 9dB ゲインを使用
+- 関連資料:
+  > [MAX98357A](./information/MAX98357AETE+T.pdf)
+- 依存ライブラリ:
+  > [Arduino_DriveBus-1.1.16]()
+
+### 2. マイク
+
+> #### T-Display-S3-Pro-MVSRBoard_V1.0 版
+>
+> - チップ: MSM261S4030H0R
+> - バス通信プロトコル: I2S
+> - 関連資料:
+>   > [MSM261S4030H0R](./information/MEMSensing-MSM261S4030H0R.pdf)
+> - 依存ライブラリ:
+>   > [Arduino_DriveBus-1.1.16]()
+
+> #### T-Display-S3-Pro-MVSRBoard_V1.1 版
+>
+> - チップ: MP34DT05-A
+> - バス通信プロトコル: PDM
+> - 関連資料:
+>   > [MP34DT05-A](./information/mp34dt05-a.pdf)
+> - 依存ライブラリ:
+>   > [Arduino_DriveBus-1.1.16]()
+
+### 3. 振動
+
+- バス通信プロトコル: PWM
 
 ### 4. RTC
 
-* Chip: PCF85063ATL
-* Bus communication protocol: IIC
-* Related documentation: 
-    >[PCF85063ATL](./information/PCF85063ATL-1,118.pdf)
-* Dependent libraries: 
-    >[Arduino_DriveBus-1.1.16]()
+- チップ: PCF85063ATL
+- バス通信プロトコル: I2C
+- 関連資料:
+  > [PCF85063ATL](./information/PCF85063ATL-1,118.pdf)
+- 依存ライブラリ:
+  > [Arduino_DriveBus-1.1.16]()
 
-## SoftwareDeployment
+## ソフトウェア導入
 
-### Examples Support
+### サンプル対応状況
 
-| Example | `[Platformio IDE][espressif32-v6.5.0]`<br />`[Arduino IDE][esp32_v2.0.14]` | Description | Picture |
-| ------  | ------ | ------ | ------ | 
-| [CST226SE](./examples/CST226SE) |  <p align="center">![alt text][supported] | | |
-| [Deep_Sleep_Wake_Up](./examples/Deep_Sleep_Wake_Up) |  <p align="center">![alt text][supported] | | |
-| [DMIC_ReadData](./examples/DMIC_ReadData) |  <p align="center">![alt text][supported] | | |
-| [DMIC_SD](./examples/DMIC_SD) |  <p align="center">![alt text][supported] | | |
-| [Get_HTTP_Response_Time](./examples/Get_HTTP_Response_Time) |  <p align="center">![alt text][supported] | | |
-| [GFX](./examples/GFX) |  <p align="center">![alt text][supported] | | |
-| [IIC_Scan_2](./examples/IIC_Scan_2) |  <p align="center">![alt text][supported] | | |
-| [Original_Test](./examples/Original_Test) |  <p align="center">![alt text][supported] | Original factory program | |
-| [PCF85063](./examples/PCF85063) |  <p align="center">![alt text][supported] | | |
-| [PCF85063_Scheduled_INT](./examples/PCF85063_Scheduled_INT) |  <p align="center">![alt text][supported] | | |
-| [PCF85063_Timer_INT](./examples/PCF85063_Timer_INT) |  <p align="center">![alt text][supported] | | |
-| [RT9080](./examples/RT9080) |  <p align="center">![alt text][supported] | | |
-| [SD_Explorer_Music](./examples/SD_Explorer_Music) |  <p align="center">![alt text][supported] | | |
-| [SD_Music](./examples/SD_Music) |  <p align="center">![alt text][supported] | | |
-| [SY6970](./examples/SY6970) |  <p align="center">![alt text][supported] | | |
-| [SY6970_OTG](./examples/SY6970_OTG) |  <p align="center">![alt text][supported] | | |
-| [USB_Host_Camera_Screen](./examples/USB_Host_Camera_Screen) |  <p align="center">![alt text][supported] | | |
-| [Vibration_Motor](./examples/Vibration_Motor) |  <p align="center">![alt text][supported] | | |
-| [WIFI_HTTP_Download_File](./examples/WIFI_HTTP_Download_File) |  <p align="center">![alt text][supported] | | |
-| [WIFI_HTTP_Download_SD_file](./examples/WIFI_HTTP_Download_SD_file) |  <p align="center">![alt text][supported] | | |
-| [Wifi_Music](./examples/Wifi_Music) |  <p align="center">![alt text][supported] | | |
+| サンプル                                                            | `[PlatformIO IDE][espressif32-v6.5.0]`<br />`[Arduino IDE][esp32_v2.0.14]` | 説明               | 画像 |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------ | ---- |
+| [CST226SE](./examples/CST226SE)                                     | <p align="center">![alt text][supported]                                   |                    |      |
+| [Deep_Sleep_Wake_Up](./examples/Deep_Sleep_Wake_Up)                 | <p align="center">![alt text][supported]                                   |                    |      |
+| [DMIC_ReadData](./examples/DMIC_ReadData)                           | <p align="center">![alt text][supported]                                   |                    |      |
+| [DMIC_SD](./examples/DMIC_SD)                                       | <p align="center">![alt text][supported]                                   |                    |      |
+| [Get_HTTP_Response_Time](./examples/Get_HTTP_Response_Time)         | <p align="center">![alt text][supported]                                   |                    |      |
+| [GFX](./examples/GFX)                                               | <p align="center">![alt text][supported]                                   |                    |      |
+| [IIC_Scan_2](./examples/IIC_Scan_2)                                 | <p align="center">![alt text][supported]                                   |                    |      |
+| [Original_Test](./examples/Original_Test)                           | <p align="center">![alt text][supported]                                   | 工場出荷プログラム |      |
+| [PCF85063](./examples/PCF85063)                                     | <p align="center">![alt text][supported]                                   |                    |      |
+| [PCF85063_Scheduled_INT](./examples/PCF85063_Scheduled_INT)         | <p align="center">![alt text][supported]                                   |                    |      |
+| [PCF85063_Timer_INT](./examples/PCF85063_Timer_INT)                 | <p align="center">![alt text][supported]                                   |                    |      |
+| [RT9080](./examples/RT9080)                                         | <p align="center">![alt text][supported]                                   |                    |      |
+| [SD_Explorer_Music](./examples/SD_Explorer_Music)                   | <p align="center">![alt text][supported]                                   |                    |      |
+| [SD_Music](./examples/SD_Music)                                     | <p align="center">![alt text][supported]                                   |                    |      |
+| [SY6970](./examples/SY6970)                                         | <p align="center">![alt text][supported]                                   |                    |      |
+| [SY6970_OTG](./examples/SY6970_OTG)                                 | <p align="center">![alt text][supported]                                   |                    |      |
+| [USB_Host_Camera_Screen](./examples/USB_Host_Camera_Screen)         | <p align="center">![alt text][supported]                                   |                    |      |
+| [Vibration_Motor](./examples/Vibration_Motor)                       | <p align="center">![alt text][supported]                                   |                    |      |
+| [WIFI_HTTP_Download_File](./examples/WIFI_HTTP_Download_File)       | <p align="center">![alt text][supported]                                   |                    |      |
+| [WIFI_HTTP_Download_SD_file](./examples/WIFI_HTTP_Download_SD_file) | <p align="center">![alt text][supported]                                   |                    |      |
+| [Wifi_Music](./examples/Wifi_Music)                                 | <p align="center">![alt text][supported]                                   |                    |      |
 
 [supported]: https://img.shields.io/badge/-supported-green "example"
 
-| Firmware | Description | Picture |
-| ------  | ------  | ------ |
-| [Original_Test(T-Display-S3-Pro-MVSRBoard_V1.0)](./firmware/[T-Display-S3-Pro-MVSRBoard_V1.0][Original_Test]_firmware_V1.0.1.bin) | Original factory program |  |
-| [Original_Test(T-Display-S3-Pro-MVSRBoard_V1.1)](./firmware/(麦克风数据字体颜色从白色改成蓝色)[T-Display-S3-Pro-MVSRBoard_V1.1][Original_Test]_firmware_202412261832.bin) | Original factory program |  |
+| ファームウェア                                                                                                                                                              | 説明               | 画像 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---- |
+| [Original_Test(T-Display-S3-Pro-MVSRBoard_V1.0)](./firmware/[T-Display-S3-Pro-MVSRBoard_V1.0][Original_Test]_firmware_V1.0.1.bin)                                           | 工場出荷プログラム |      |
+| [Original_Test(T-Display-S3-Pro-MVSRBoard_V1.1)](<./firmware/(麦克风数据字体颜色从白色改成蓝色)[T-Display-S3-Pro-MVSRBoard_V1.1][Original_Test]_firmware_202412261832.bin>) | 工場出荷プログラム |      |
 
 ### PlatformIO
-1. Install [VisualStudioCode](https://code.visualstudio.com/Download) ,Choose installation based on your system type.
 
-2. Open the "Extension" section of the Visual Studio Code software sidebar(Alternatively, use "<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>" to open the extension),Search for the "PlatformIO IDE" extension and download it.
+1. [Visual Studio Code](https://code.visualstudio.com/Download) をインストールし、お使いの OS に合わせて選択してください。
 
-3. During the installation of the extension, you can go to GitHub to download the program. You can download the main branch by clicking on the "<> Code" with green text, or you can download the program versions from the "Releases" section in the sidebar.
+2. VS Code のサイドバーで「拡張機能」を開く（<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> でも可）。「PlatformIO IDE」を検索してインストールしてください。
 
-4. After the installation of the extension is completed, open the Explorer in the sidebar(Alternatively, use "<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>" go open it),Click on "Open Folder," locate the project code you just downloaded (the entire folder), and click "Add." At this point, the project files will be added to your workspace.
+3. 拡張機能のインストール中に、GitHub から本リポジトリを取得できます。「<> Code」の緑ボタンでメインブランチをダウンロードするか、サイドバーの「Releases」から特定バージョンを取得できます。
 
-5. Open the "platformio.ini" file in the project folder (PlatformIO will automatically open the "platformio.ini" file corresponding to the added folder). Under the "[platformio]" section, uncomment and select the example program you want to burn (it should start with "default_envs = xxx") Then click "<kbd>[√](image/4.png)</kbd>" in the bottom left corner to compile,If the compilation is correct, connect the microcontroller to the computer and click "<kbd>[→](image/5.png)</kbd>" in the bottom left corner to download the program.
+4. 拡張機能のインストール後、サイドバーの「エクスプローラー」を開き（<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> でも可）、「フォルダを開く」でダウンロードしたプロジェクトのルートフォルダを選択し「追加」してください。プロジェクトがワークスペースに追加されます。
+
+5. プロジェクトフォルダ内の「platformio.ini」を開きます（フォルダ追加時に PlatformIO が自動で開く場合があります）。`[platformio]` セクションで、書き込みたいサンプルに対応する行（`default_envs = xxx`）のコメントを外して選択し、左下の「<kbd>[√](image/4.png)</kbd>」でビルドしてください。ビルドが成功したらマイコンを接続し、左下の「<kbd>[→](image/5.png)</kbd>」で書き込みます。
 
 ### Arduino
-1. Install [Arduino](https://www.arduino.cc/en/software) ,Choose installation based on your system type.
 
-2. Open the "example" directory within the project folder, select the example project folder, and open the file ending with ".ino" to open the Arduino IDE project workspace.
+1. [Arduino](https://www.arduino.cc/en/software) をインストールし、お使いの OS に合わせて選択してください。
 
-3. Open the "Tools" menu at the top right -> Select "Board" -> "Board Manager." Find or search for "esp32" and download the board files from the author named "Espressif Systems." Then, go back to the "Board" menu and select the development board type under "ESP32 Arduino." The selected development board type should match the one specified in the "platformio.ini" file under the [env] section with the header "board = xxx." If there is no corresponding development board, you may need to manually add the development board from the "board" directory within your project folder.
+2. プロジェクトフォルダ内の「example」ディレクトリから、使いたいサンプルのフォルダを選び、拡張子「.ino」のファイルを開いて Arduino IDE のワークスペースとして開きます。
 
-4. Open menu bar "[File](image/6.png)" -> "[Preferences](image/6.png)" ,Find "[Sketchbook location](image/7.png)"  here,copy and paste all library files and folders from the "libraries" folder in the project directory into the "libraries" folder in this directory.
+3. メニュー「ツール」→「ボード」→「ボードマネージャ」を開き、「esp32」で検索して「Espressif Systems」のボードパックをインストールします。その後「ボード」メニューから「ESP32 Arduino」の該当ボードを選びます。選択するボードは、プロジェクトの「platformio.ini」の `[env]` 内の `board = xxx` と一致させてください。一覧にない場合は、プロジェクト内の「board」フォルダから手動で追加する必要がある場合があります。
 
-5. Select the correct settings in the Tools menu, as shown in the table below.
+4. メニュー「[ファイル](image/6.png)」→「[環境設定](image/6.png)」で「[スケッチの保存場所](image/7.png)」を確認し、プロジェクトの「libraries」フォルダ内のライブラリをすべて、そのスケッチ保存場所内の「libraries」フォルダにコピーしてください。
+
+5. 「ツール」メニューで下表のとおり設定してください。
 
 #### ESP32-S3
-| Setting                               | Value                                 |
-| :-------------------------------: | :-------------------------------: |
-| Board                                 | ESP32S3 Dev Module           |
-| Upload Speed                     | 921600                               |
-| USB Mode                           | Hardware CDC and JTAG     |
-| USB CDC On Boot                | Enabled                              |
-| USB Firmware MSC On Boot | Disabled                             |
-| USB DFU On Boot                | Disabled                             |
-| CPU Frequency                   | 240MHz (WiFi)                    |
-| Flash Mode                         | QIO 80MHz                         |
-| Flash Size                           | 16MB (128Mb)                    |
-| Core Debug Level                | None                                 |
-| Partition Scheme                | 16M Flash (3MB APP/9.9MB FATFS) |
-| PSRAM                                | OPI PSRAM                         |
-| Arduino Runs On                  | Core 1                               |
-| Events Run On                     | Core 1                               |           
 
-6. Select the correct port.
+|         設定項目         |               値                |
+| :----------------------: | :-----------------------------: |
+|          ボード          |       ESP32S3 Dev Module        |
+|     アップロード速度     |             921600              |
+|         USB Mode         |      Hardware CDC and JTAG      |
+|     USB CDC On Boot      |             Enabled             |
+| USB Firmware MSC On Boot |            Disabled             |
+|     USB DFU On Boot      |            Disabled             |
+|      CPU Frequency       |          240MHz (WiFi)          |
+|        Flash Mode        |            QIO 80MHz            |
+|        Flash Size        |          16MB (128Mb)           |
+|     Core Debug Level     |              None               |
+|     Partition Scheme     | 16M Flash (3MB APP/9.9MB FATFS) |
+|          PSRAM           |            OPI PSRAM            |
+|     Arduino Runs On      |             Core 1              |
+|      Events Run On       |             Core 1              |
 
-7. Click "<kbd>[√](image/8.png)</kbd>" in the upper right corner to compile,If the compilation is correct, connect the microcontroller to the computer,Click "<kbd>[→](image/9.png)</kbd>" in the upper right corner to download.
+6. 正しい COM ポートを選択してください。
 
-### firmware download
-1. Open the project file "tools" and locate the ESP32 burning tool. Open it.
+7. 右上の「<kbd>[√](image/8.png)</kbd>」でビルドし、成功したらマイコンを接続して右上の「<kbd>[→](image/9.png)</kbd>」で書き込んでください。
 
-2. Select the correct burning chip and burning method, then click "OK." As shown in the picture, follow steps 1->2->3->4->5 to burn the program. If the burning is not successful, press and hold the "BOOT-0" button and then download and burn again.
+### ファームウェアの書き込み（ツール使用）
 
-3. Burn the file in the root directory of the project file "[firmware](./firmware/)" file,There is a description of the firmware file version inside, just choose the appropriate version to download.
+1. プロジェクトの「tools」フォルダ内の ESP32 用書き込みツールを開きます。
+
+2. チップと書き込み方式を選択して「OK」をクリックし、画面の手順 1→2→3→4→5 の順で書き込んでください。失敗する場合は「BOOT-0」ボタンを押したまま再度書き込みを試してください。
+
+3. プロジェクトルートの「[firmware](./firmware/)」フォルダ内のバイナリを書き込みます。ファームウェアのバージョン説明はフォルダ内にあるので、必要なバージョンを選んでください。
 
 <p align="center" width="100%">
     <img src="image/10.png" alt="example">
     <img src="image/11.png" alt="example">
 </p>
 
+## ピン一覧
 
-## PinOverview
+| スピーカー端子 | ESP32S3 ピン |
+| :------------: | :----------: |
+|      BCLK      |     IO4      |
+|     LRCLK      |     IO15     |
+|      DATA      |     IO11     |
+|    SD_MODE     |     IO41     |
 
-| Speaker pins  | ESP32S3 pins|
-| :------------------: | :------------------:|
-| BCLK         | IO4       |
-| LRCLK         | IO15       |
-| DATA         | IO11       |
-| SD_MODE         | IO41       |
+> #### T-Display-S3-Pro-MVSRBoard_V1.0 版(こちらを使用中)
+>
+> | マイク端子 | ESP32S3 ピン |
+> | :--------: | :----------: |
+> |    BCLK    |     IO1      |
+> |     WS     |     IO10     |
+> |    DATA    |     IO2      |
+> |     EN     |     IO3      |
 
-> #### T-Display-S3-Pro-MVSRBoard_V1.0 version
-> | Microphone pins  | ESP32S3 pins|
-> | :------------------: | :------------------:|
-> | BCLK         | IO1       |
-> | WS         | IO10       |
-> | DATA         | IO2       |
-> | EN         | IO3       |
+> #### T-Display-S3-Pro-MVSRBoard_V1.1 版
+>
+> | マイク端子 | ESP32S3 ピン |
+> | :--------: | :----------: |
+> |   LRCLK    |     IO1      |
+> |    DATA    |     IO2      |
+> |     EN     |     IO3      |
 
-> #### T-Display-S3-Pro-MVSRBoard_V1.1 version
-> | Microphone pins  | ESP32S3 pins|
-> | :------------------: | :------------------:|
-> | LRCLK         | IO1       |
-> | DATA         | IO2       |
-> | EN         | IO3       |
+| 振動モーター端子 | ESP32S3 ピン |
+| :--------------: | :----------: |
+|       DATA       |     IO45     |
 
-| Vibration motor pins  | ESP32S3 pins|
-| :------------------: | :------------------:|
-| DATA         | IO45       |
+| RT9080 電源端子 | ESP32S3 ピン |
+| :-------------: | :----------: |
+|       EN        |     IO42     |
 
-| RT9080 power pins  | ESP32S3 pins|
-| :------------------: | :------------------:|
-| EN         | IO42       |
+| RTC 端子 | ESP32S3 ピン |
+| :------: | :----------: |
+|   SDA    |     IO5      |
+|   SCL    |     IO6      |
+|   INT    |     IO7      |
 
-| RTC pins  | ESP32S3 pins|
-| :------------------: | :------------------:|
-| SDA         | IO5       |
-| SCL         | IO6       |
-| INT         | IO7       |
+## 関連テスト
 
-## RelatedTests
+### 消費電力
 
-### Power Dissipation
-| Firmware | Program| Description | Picture |
-| ------  | ------  | ------ | ------ | 
-| [Deep_Sleep_Wake_Up](./firmware/[T-Display-S3-Pro-MVSRBoard_V1.0-V1.1][Deep_Sleep_Wake_Up]_firmware_202502051632.bin) | [Deep_Sleep_Wake_Up](./examples/Deep_Sleep_Wake_Up) | Static current: 1.22 μA for more information please refer to [Power Consumption Test Log](./relevant_test/PowerConsumptionTestLog_[T-Display-S3-Pro-MVSRBoard_V1.1]_20241210.pdf) | |
+| ファームウェア                                                                                                        | プログラム                                          | 説明                                                                                                                                            | 画像 |
+| --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| [Deep_Sleep_Wake_Up](./firmware/[T-Display-S3-Pro-MVSRBoard_V1.0-V1.1][Deep_Sleep_Wake_Up]_firmware_202502051632.bin) | [Deep_Sleep_Wake_Up](./examples/Deep_Sleep_Wake_Up) | 静止電流: 1.22 μA。詳細は [消費電力テストログ](./relevant_test/PowerConsumptionTestLog_[T-Display-S3-Pro-MVSRBoard_V1.1]_20241210.pdf) を参照。 |      |
 
-## FAQ
+## トラブルシューティング
 
-* Q. After reading the above tutorials, I still don't know how to build a programming environment. What should I do?
-* A. If you still don't understand how to build an environment after reading the above tutorials, you can refer to the [LilyGo-Document](https://github.com/Xinyuan-LilyGO/LilyGo-Document) document instructions to build it.
-
-<br />
-
-* Q. Why does Arduino IDE prompt me to update library files when I open it? Should I update them or not?
-* A. Choose not to update library files. Different versions of library files may not be mutually compatible, so it is not recommended to update library files.
+T-Display-S3-Pro-MVSRBoardは、[LilyGo-Document](https://github.com/Xinyuan-LilyGO/LilyGo-Document) の手順を参照して環境を構築してください。
 
 <br />
 
-* Q. Why is there no serial data output on the "Uart" interface on my board? Is it defective and unusable?
-* A. The default project configuration uses the USB interface as Uart0 serial output for debugging purposes. The "Uart" interface is connected to Uart0, so it won't output any data without configuration.<br />For PlatformIO users, please open the project file "platformio.ini" and modify the option under "build_flags = xxx" from "-D ARDUINO_USB_CDC_ON_BOOT=true" to "-D ARDUINO_USB_CDC_ON_BOOT=false" to enable external "Uart" interface.<br />For Arduino users, open the "Tools" menu and select "USB CDC On Boot: Disabled" to enable the external "Uart" interface.
+- Q. 基板の「Uart」端子からシリアルデータが出ません。不良でしょうか？
+- A. デフォルトではデバッグ用に USB が Uart0 のシリアル出力として使われています。「Uart」端子も Uart0 に接続されているため、設定を変えない限りここには出力されません。<br />PlatformIO の場合は、プロジェクトの「platformio.ini」を開き、`build_flags` 内の「-D ARDUINO_USB_CDC_ON_BOOT=true」を「-D ARDUINO_USB_CDC_ON_BOOT=false」に変更すると外部「Uart」が有効になります。<br />Arduino IDE の場合は「ツール」メニューで「USB CDC On Boot: Disabled」を選んでください。
 
 <br />
 
-* Q. Why is my board continuously failing to download the program?
-* A. Please hold down the "BOOT-0" button and try downloading the program again.
+- Q. プログラムの書き込みが何度も失敗します。
+- A. 「BOOT-0」ボタンを押したまま、もう一度書き込みを試してください。
 
-## Project
-* [T-Display-S3-Pro-MVSRBoard_V1.0](./project/T-Display-S3-Pro-MVSRBoard_V1.0.pdf)
-* [T-Display-S3-Pro-MVSRBoard_V1.1](./project/T-Display-S3-Pro-MVSRBoard_V1.1.pdf)
+## T-Display-S3-Pro-MVSRBoardの詳細
 
+- [T-Display-S3-Pro-MVSRBoard_V1.0](./project/T-Display-S3-Pro-MVSRBoard_V1.0.pdf)
+- [T-Display-S3-Pro-MVSRBoard_V1.1](./project/T-Display-S3-Pro-MVSRBoard_V1.1.pdf)

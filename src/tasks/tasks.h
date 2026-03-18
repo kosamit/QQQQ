@@ -6,11 +6,8 @@
 #ifndef TASKS_H
 #define TASKS_H
 
-#include "../globals.h"
-
-// FreeRTOS タスク関数
-void touchTask(void* parameter);
-void displayTask(void* parameter);
-void clockTask(void* parameter);
+#include "touch_task.h"
+#include "display_task.h"
+#include "clock_task.h"
 
 #endif // TASKS_H

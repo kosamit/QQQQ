@@ -1,24 +1,16 @@
 <!--
  * @Description: None
- * @Author: LILYGO_L
- * @Date: 2023-09-11 16:13:14
- * @LastEditTime: 2025-02-14 14:40:34
- * @License: GPL 3.0
+ * @Author: kosamit
+ * @Date: 2026-03-18 23:00:00
+ * @LastEditTime: 2026-03-18 23:00:00
 -->
-<h1 align = "center">T-Display-S3-Pro-MVSRBoard</h1>
+<h1 align = "center">QQQQ</h1>
 
 ## バージョン履歴
 
-|           バージョン            |   更新日   |      更新内容      |
-| :-----------------------------: | :--------: | :----------------: |
-| T-Display-S3-Pro-MVSRBoard_V1.0 | 2024-09-13 |        初版        |
-| T-Display-S3-Pro-MVSRBoard_V1.1 | 2024-12-03 | マイクモデルの変更 |
-
-## 購入リンク
-
-|              製品               | SOC  | FLASH | PSRAM |  リンク  |
-| :-----------------------------: | :--: | :---: | :---: | :------: |
-| T-Display-S3-Pro-MVSRBoard_V1.0 | NULL | NULL  | NULL  | [NULL]() |
+| バージョン |   更新日   |     更新内容     |
+| :--------: | :--------: | :--------------: |
+|    V0.1    | 2026-03-18 | テストモジュール |
 
 ## 目次
 
@@ -34,7 +26,12 @@
 
 ## 概要
 
+QQQQ(Quad Q)はポケットサイズのドラムパッドを持ったMIDIデバイスです。
+T-Display-S3-Pro-MVSRBoardでプロトタイプの開発を行っています。
+
 T-Display-S3-Pro-MVSRBoard は [T-Display-S3-Pro](https://github.com/Xinyuan-LilyGO/T-Display-S3-Pro) マザーボード用のバックプレートで、オンボードスピーカーとマイクを極めて低い静止電流で拡張できます。加えて、振動と RTC（リアルタイムクロック）機能を備えています。
+
+T-Display-S3-Pro-MVSRBoard_V1.0を使っています。
 
 **ランタイム:** 本プロジェクトでは **FreeRTOS** をリアルタイム OS として採用しています（ESP32-S3 上の ESP-IDF / Arduino フレームワーク経由）。マルチタスクは FreeRTOS のタスク（タッチ・表示・クロックなど）と同期プリミティブ（キュー、セマフォ）で実装されています。
 
@@ -212,7 +209,7 @@ T-Display-S3-Pro-MVSRBoard は [T-Display-S3-Pro](https://github.com/Xinyuan-Lil
 |      DATA      |     IO11     |
 |    SD_MODE     |     IO41     |
 
-> #### T-Display-S3-Pro-MVSRBoard_V1.0 版
+> #### T-Display-S3-Pro-MVSRBoard_V1.0 版(こちらを使用中)
 >
 > | マイク端子 | ESP32S3 ピン |
 > | :--------: | :----------: |
@@ -251,15 +248,9 @@ T-Display-S3-Pro-MVSRBoard は [T-Display-S3-Pro](https://github.com/Xinyuan-Lil
 | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | [Deep_Sleep_Wake_Up](./firmware/[T-Display-S3-Pro-MVSRBoard_V1.0-V1.1][Deep_Sleep_Wake_Up]_firmware_202502051632.bin) | [Deep_Sleep_Wake_Up](./examples/Deep_Sleep_Wake_Up) | 静止電流: 1.22 μA。詳細は [消費電力テストログ](./relevant_test/PowerConsumptionTestLog_[T-Display-S3-Pro-MVSRBoard_V1.1]_20241210.pdf) を参照。 |      |
 
-## よくある質問
+## トラブルシューティング
 
-- Q. 上記の手順を読んでも開発環境の構築方法がわかりません。どうすればよいですか？
-- A. 上記でも不明な場合は、[LilyGo-Document](https://github.com/Xinyuan-LilyGO/LilyGo-Document) の手順を参照して環境を構築してください。
-
-<br />
-
-- Q. Arduino IDE を開くとライブラリの更新を促されます。更新してもよいですか？
-- A. 更新しないでください。バージョン違いのライブラリは互換性がない場合があり、更新は推奨しません。
+T-Display-S3-Pro-MVSRBoardは、[LilyGo-Document](https://github.com/Xinyuan-LilyGO/LilyGo-Document) の手順を参照して環境を構築してください。
 
 <br />
 
@@ -271,7 +262,7 @@ T-Display-S3-Pro-MVSRBoard は [T-Display-S3-Pro](https://github.com/Xinyuan-Lil
 - Q. プログラムの書き込みが何度も失敗します。
 - A. 「BOOT-0」ボタンを押したまま、もう一度書き込みを試してください。
 
-## プロジェクト
+## T-Display-S3-Pro-MVSRBoardの詳細
 
 - [T-Display-S3-Pro-MVSRBoard_V1.0](./project/T-Display-S3-Pro-MVSRBoard_V1.0.pdf)
 - [T-Display-S3-Pro-MVSRBoard_V1.1](./project/T-Display-S3-Pro-MVSRBoard_V1.1.pdf)

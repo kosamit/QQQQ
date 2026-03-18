@@ -1,5 +1,5 @@
 /*
- * @Description: 4x4 Grid Library Implementation for Qurospad
+ * @Description: 4x4 Grid Library Implementation for QQQQ
  * @Author: LILYGO_L
  * @Date: 2025-02-06
  * @License: GPL 3.0

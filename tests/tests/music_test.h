@@ -1,5 +1,5 @@
 /*
- * @Description: Music Test Module for Qurospad
+ * @Description: Music Test Module for QQQQ
  * @Author: LILYGO_L
  * @Date: 2025-02-06
  * @License: GPL 3.0

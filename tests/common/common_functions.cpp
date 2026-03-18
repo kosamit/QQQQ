@@ -1,5 +1,5 @@
 /*
- * @Description: Common Functions Implementation for Qurospad
+ * @Description: Common Functions Implementation for QQQQ
  * @Author: LILYGO_L
  * @Date: 2025-02-06
  * @License: GPL 3.0

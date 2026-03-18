@@ -1,4 +1,4 @@
-# Qurospad Modular Test Structure
+# QQQQ Modular Test Structure
 
 このプロジェクトは、元の`Original_Test.ino`ファイルを機能ごとに分割して、より保守しやすい構造に再編成したものです。
 

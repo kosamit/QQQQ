@@ -1,5 +1,5 @@
 /*
- * @Description: Common configuration and definitions for Qurospad tests
+ * @Description: Common configuration and definitions for QQQQ tests
  * @Author: LILYGO_L
  * @Date: 2025-02-06
  * @License: GPL 3.0
@@ -19,6 +19,9 @@
 #include <SPI.h>
 #include <SD.h>
 #include <FS.h>
+
+// Device Name
+#define DEVICE_NAME "QQQQ"
 
 // Software Information
 #define SOFTWARE_NAME "Original_Test"

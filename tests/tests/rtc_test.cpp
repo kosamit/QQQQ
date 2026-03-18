@@ -1,5 +1,5 @@
 /*
- * @Description: RTC Test Module Implementation for Qurospad
+ * @Description: RTC Test Module Implementation for QQQQ
  * @Author: LILYGO_L
  * @Date: 2025-02-06
  * @License: GPL 3.0

@@ -4,6 +4,8 @@
  */
 
 #include "screens.h"
+#include "../neotrellis/neotrellis_handler.h"
+#include <SD.h>
 
 // モード切り替えボタンを描画
 void drawModeButton() {
@@ -88,7 +90,7 @@ void drawMenuScreen() {
     gfx->setCursor(160, 5);
     gfx->print(DEVICE_NAME);
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         MenuItem& item = menuItems[i];
 
         uint16_t color = 0x4208;
@@ -211,6 +213,147 @@ void drawAboutScreen() {
     gfx->print("BACK");
 }
 
+// SDカードからオーディオファイルをスキャン
+void scanMusicFiles() {
+    musicFileCount = 0;
+    musicScrollOffset = 0;
+    musicSelectedIndex = -1;
+
+    if (!SD_Initialization_Flag) {
+        return;
+    }
+
+    File root = SD.open("/");
+    if (!root) {
+        return;
+    }
+
+    while (musicFileCount < MUSIC_MAX_FILES) {
+        File entry = root.openNextFile();
+        if (!entry) break;
+
+        if (!entry.isDirectory()) {
+            String name = entry.name();
+            name.toLowerCase();
+            if (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".flac")) {
+                // ファイル名を保存（"/"付き）
+                snprintf(musicFiles[musicFileCount], 64, "/%s", entry.name());
+                musicFileCount++;
+            }
+        }
+        entry.close();
+    }
+    root.close();
+
+    Serial.printf("Found %d audio files\n", musicFileCount);
+}
+
+// ファイルリストを描画
+void drawMusicFileList() {
+    // リスト領域をクリア
+    int16_t listHeight = 170 - MUSIC_LIST_Y_START;
+    gfx->fillRect(0, MUSIC_LIST_Y_START, 480, listHeight, BLACK);
+
+    if (!SD_Initialization_Flag) {
+        gfx->setTextSize(2);
+        gfx->setTextColor(0xF800);
+        gfx->setCursor(100, 80);
+        gfx->print("SD card not found");
+        return;
+    }
+
+    if (musicFileCount == 0) {
+        gfx->setTextSize(2);
+        gfx->setTextColor(0xFFE0);
+        gfx->setCursor(100, 80);
+        gfx->print("No audio files");
+        return;
+    }
+
+    int16_t visibleItems = listHeight / MUSIC_ITEM_HEIGHT;
+    gfx->setTextSize(2);
+
+    for (int16_t i = 0; i < visibleItems && (i + musicScrollOffset) < musicFileCount; i++) {
+        int16_t fileIdx = i + musicScrollOffset;
+        int16_t y = MUSIC_LIST_Y_START + i * MUSIC_ITEM_HEIGHT;
+
+        // 選択中（再生中）のハイライト
+        if (fileIdx == musicSelectedIndex && musicIsPlaying) {
+            gfx->fillRect(10, y, 460, MUSIC_ITEM_HEIGHT - 2, 0x0320);
+        } else if (fileIdx == musicSelectedIndex) {
+            gfx->fillRect(10, y, 460, MUSIC_ITEM_HEIGHT - 2, 0x2104);
+        }
+
+        gfx->setTextColor(WHITE);
+        gfx->setCursor(15, y + 5);
+
+        // 再生中マーク
+        if (fileIdx == musicSelectedIndex && musicIsPlaying) {
+            gfx->print("> ");
+        } else {
+            gfx->print("  ");
+        }
+
+        // ファイル名（"/"を除いて表示、長すぎる場合はカット）
+        const char* fname = musicFiles[fileIdx] + 1; // skip leading "/"
+        char displayName[32];
+        strncpy(displayName, fname, 31);
+        displayName[31] = '\0';
+        gfx->print(displayName);
+    }
+}
+
+// 音楽画面描画
+void drawMusicScreen() {
+    gfx->fillScreen(BLACK);
+
+    // タイトル
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(10, 8);
+    gfx->print("Music Player");
+
+    // 停止ボタン
+    if (musicIsPlaying) {
+        gfx->fillRoundRect(350, 5, 120, 22, 3, 0xF800);
+        gfx->drawRoundRect(350, 5, 120, 22, 3, WHITE);
+        gfx->setTextSize(1);
+        gfx->setTextColor(WHITE);
+        gfx->setCursor(385, 12);
+        gfx->print("STOP");
+    }
+
+    // ファイルリスト
+    scanMusicFiles();
+    drawMusicFileList();
+
+    // 戻るボタン
+    gfx->fillRoundRect(10, 172, 100, 40, 5, 0xF800);
+    gfx->drawRoundRect(10, 172, 100, 40, 5, WHITE);
+    gfx->setTextSize(2);
+    gfx->setTextColor(WHITE);
+    gfx->setCursor(30, 185);
+    gfx->print("BACK");
+}
+
+// ファイル再生
+void playMusicFile(int16_t index) {
+    if (index < 0 || index >= musicFileCount || !SD_Initialization_Flag) return;
+
+    audio.connecttoSD(musicFiles[index]);
+    musicSelectedIndex = index;
+    musicIsPlaying = true;
+
+    Serial.printf("Playing: %s\n", musicFiles[index]);
+}
+
+// 再生停止
+void stopMusic() {
+    audio.stopSong();
+    musicIsPlaying = false;
+    Serial.println("Music stopped");
+}
+
 // 画面切り替え
 void switchScreen(ScreenMode newScreen) {
     if (currentScreen == SCREEN_DRUMPAD && newScreen != SCREEN_DRUMPAD) {
@@ -222,6 +365,9 @@ void switchScreen(ScreenMode newScreen) {
         for (int i = 0; i < GRID_ROWS * GRID_COLS; i++) {
             prevCellState[i] = false;
         }
+
+        // NeoTrellis LEDもクリア
+        clearNeoTrellisLEDs();
     }
 
     currentScreen = newScreen;
@@ -235,6 +381,11 @@ void switchScreen(ScreenMode newScreen) {
         case SCREEN_DRUMPAD:
             Serial.println("DRUMPAD");
             drawDrumPadScreen();
+            syncNeoTrellisLEDs();
+            break;
+        case SCREEN_MUSIC:
+            Serial.println("MUSIC");
+            drawMusicScreen();
             break;
         case SCREEN_BLUETOOTH:
             Serial.println("BLUETOOTH");

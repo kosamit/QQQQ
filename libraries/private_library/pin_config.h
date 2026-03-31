@@ -30,7 +30,7 @@
 #define SY6970_Address 0x6A
 #define SY6970_INT 21
 
-// IIC
+// IIC (タッチ、RTC、電源、NeoTrellis等 すべてのI2Cデバイス共有)
 #define IIC_SDA 5
 #define IIC_SCL 6
 

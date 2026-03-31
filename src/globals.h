@@ -14,11 +14,13 @@
 #include <freertos/semphr.h>
 #include <BLEMIDI_Transport.h>
 #include <hardware/BLEMIDI_ESP32_NimBLE.h>
+#include "Audio.h"
 
 // 画面モード定義
 enum ScreenMode {
     SCREEN_MENU,           // メニュー画面
     SCREEN_DRUMPAD,        // ドラムパッド画面
+    SCREEN_MUSIC,          // 音楽プレイヤー画面
     SCREEN_BLUETOOTH,      // Bluetooth設定画面
     SCREEN_ABOUT           // About画面
 };
@@ -77,10 +79,25 @@ extern ModeButton modeButton;
 extern BluetoothButton bleButton;
 extern TouchMode currentTouchMode;
 
+// 音楽プレイヤー用
+#define MUSIC_MAX_FILES 20
+#define MUSIC_ITEM_HEIGHT 28
+#define MUSIC_LIST_Y_START 30
+extern char musicFiles[MUSIC_MAX_FILES][64];
+extern int16_t musicFileCount;
+extern int16_t musicScrollOffset;
+extern int16_t musicSelectedIndex;
+extern bool musicIsPlaying;
+
+// Audio / SD
+extern Audio audio;
+extern bool SD_Initialization_Flag;
+
 // FreeRTOS オブジェクト
 extern TaskHandle_t touchTaskHandle;
 extern TaskHandle_t displayTaskHandle;
 extern TaskHandle_t clockTaskHandle;
+extern TaskHandle_t neotrellisTaskHandle;
 extern QueueHandle_t touchEventQueue;
 extern SemaphoreHandle_t displayMutex;
 

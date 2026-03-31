@@ -12,6 +12,10 @@
 #include "bluetooth/bluetooth.h"
 #include "midi/midi_handler.h"
 #include "tasks/tasks.h"
+#include "neotrellis/neotrellis_handler.h"
+#include "webserver/webserver.h"
+#include <SPI.h>
+#include <SD.h>
 
 // Global Variables Definition
 bool Wifi_Connection_Flag = true;
@@ -175,7 +179,19 @@ void setup()
     PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
                                      PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
 
-    Volume_Value = 3;
+    // SD カード初期化
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+    if (SD.begin(SD_CS, SPI, 40000000)) {
+        Serial.println("SD card initialization successful");
+        SD_Initialization_Flag = true;
+    } else {
+        Serial.println("SD card initialization failed");
+        SD_Initialization_Flag = false;
+    }
+
+    // オーディオ I2S ピン設定
+    audio.setPinout(MAX98357A_BCLK, MAX98357A_LRCLK, MAX98357A_DATA);
+    Volume_Value = 10;
     audio.setVolume(Volume_Value); // 0...21、音量設定
 
     // BLE-MIDI 初期化（手動起動に変更）
@@ -201,6 +217,11 @@ void setup()
             // NTP時間同期設定
             configTime(GMT_OFFSET_SEC, DAY_LIGHT_OFFSET_SEC, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
             Wifi_Connection_Flag = true;
+
+            // Webファイルマネージャー起動
+            if (SD_Initialization_Flag) {
+                startWebServer();
+            }
         } else {
             Serial.println();
             Serial.println("WiFi接続失敗");
@@ -227,6 +248,13 @@ void setup()
     grid->setInactiveColor(0x0000);
     grid->setTouchMode(TOUCH_MODE_TOGGLE);
     grid->setDefaultMidiNotes(60);
+
+    // NeoTrellis 初期化
+    if (initNeoTrellis()) {
+        Serial.println("NeoTrellis connected - drum pad ready");
+    } else {
+        Serial.println("NeoTrellis not found - touch-only mode");
+    }
 
     // メニュー画面を表示
     drawMenuScreen();
@@ -273,16 +301,30 @@ void setup()
         while(1);
     }
 
+    // NeoTrellisポーリングタスク (優先度: 中 - 接続時のみ)
+    if (neotrellisConnected) {
+        result = xTaskCreatePinnedToCore(
+            neotrellisTask, "NeoTrellisTask", 4096, NULL, 2, &neotrellisTaskHandle, 1);
+        if (result != pdPASS) {
+            Serial.println("NeoTrellisタスクの作成に失敗しました");
+        } else {
+            Serial.println("NeoTrellisタスク開始");
+        }
+    }
+
     Serial.println("FreeRTOS タスクが正常に開始されました");
 }
 
 void loop()
 {
+    // オーディオ再生ループ（必須）
+    audio.loop();
+
+    // Webサーバー処理
+    handleWebServer();
+
     // BLE-MIDIのreadを定期的に呼び出して接続を維持
     if (bleAdvertising) {
         MIDI.read();
     }
-
-    // FreeRTOSタスクが全てを処理するため、短い遅延を入れる
-    delay(10);
 }

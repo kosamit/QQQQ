@@ -17,6 +17,7 @@ void displayTask(void* parameter)
 
     static bool menuLastTouched = false;
     static bool drumpadLastButtonTouched = false;
+    static bool musicLastTouched = false;
     static bool bluetoothLastTouched = false;
     static bool aboutLastTouched = false;
 
@@ -34,7 +35,7 @@ void displayTask(void* parameter)
                         int16_t touchX = event.x[0];
                         int16_t touchY = event.y[0];
 
-                        for (int i = 0; i < 3; i++) {
+                        for (int i = 0; i < 4; i++) {
                             MenuItem& item = menuItems[i];
                             if (touchX >= item.x && touchX < item.x + item.width &&
                                 touchY >= item.y && touchY < item.y + item.height) {
@@ -101,6 +102,48 @@ void displayTask(void* parameter)
                         }
 
                         grid->redrawChangedCells();
+                    }
+                }
+
+                // ========================================
+                // 音楽プレイヤー画面の処理
+                // ========================================
+                else if (screen == SCREEN_MUSIC) {
+                    if (event.finger_count > 0 && !musicLastTouched) {
+                        int16_t touchX = event.x[0];
+                        int16_t touchY = event.y[0];
+
+                        // 戻るボタン
+                        if (touchX >= 10 && touchX < 110 && touchY >= 172 && touchY < 212) {
+                            switchScreen(SCREEN_MENU);
+                            musicLastTouched = true;
+                        }
+                        // 停止ボタン
+                        else if (musicIsPlaying && touchX >= 350 && touchX < 470 && touchY >= 5 && touchY < 27) {
+                            stopMusic();
+                            drawMusicScreen();
+                            musicLastTouched = true;
+                        }
+                        // ファイルリストのタッチ
+                        else if (touchY >= MUSIC_LIST_Y_START && touchY < 170 && touchX >= 10 && touchX < 470) {
+                            int16_t itemIndex = (touchY - MUSIC_LIST_Y_START) / MUSIC_ITEM_HEIGHT + musicScrollOffset;
+                            if (itemIndex >= 0 && itemIndex < musicFileCount) {
+                                playMusicFile(itemIndex);
+                                drawMusicFileList();
+                                // 停止ボタンも更新
+                                gfx->fillRoundRect(350, 5, 120, 22, 3, 0xF800);
+                                gfx->drawRoundRect(350, 5, 120, 22, 3, WHITE);
+                                gfx->setTextSize(1);
+                                gfx->setTextColor(WHITE);
+                                gfx->setCursor(385, 12);
+                                gfx->print("STOP");
+                            }
+                            musicLastTouched = true;
+                        }
+                    }
+
+                    if (event.finger_count == 0) {
+                        musicLastTouched = false;
                     }
                 }
 

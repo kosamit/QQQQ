@@ -11,9 +11,16 @@
 // 画面描画関数
 void drawMenuScreen();
 void drawDrumPadScreen();
+void drawMusicScreen();
 void drawBluetoothSettingsScreen();
 void drawAboutScreen();
 void switchScreen(ScreenMode newScreen);
+
+// 音楽プレイヤー関数
+void scanMusicFiles();
+void drawMusicFileList();
+void playMusicFile(int16_t index);
+void stopMusic();
 
 // UI部品描画関数
 void drawModeButton();

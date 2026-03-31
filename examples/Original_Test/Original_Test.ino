@@ -35,10 +35,10 @@
 #define IIS_SAMPLE_RATE 44100 // 采样速率
 #define IIS_DATA_BIT 16       // 数据位数
 
-#define WIFI_SSID "xinyuandianzi"
-#define WIFI_PASSWORD "AA15994823428"
+#define WIFI_SSID "TP-Link_8A2C"
+#define WIFI_PASSWORD "58087053"
 // #define WIFI_SSID "LilyGo-AABB"
-// #define WIFI_PASSWORD "xinyuandianzi"
+// #define WIFI_PASSWORD "TP-Link_8A2C"
 
 #define WIFI_CONNECT_WAIT_MAX (10000)
 

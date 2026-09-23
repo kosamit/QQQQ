@@ -7,6 +7,7 @@
 #include "../screens/screens.h"
 #include "../bluetooth/bluetooth.h"
 #include "../midi/midi_handler.h"
+#include "../chord/chord_mode.h"
 
 // ディスプレイ更新タスク（画面ごとに完全分離）
 void displayTask(void* parameter)
@@ -17,6 +18,7 @@ void displayTask(void* parameter)
 
     static bool menuLastTouched = false;
     static bool drumpadLastButtonTouched = false;
+    static bool musicLastTouched = false;
     static bool bluetoothLastTouched = false;
     static bool aboutLastTouched = false;
 
@@ -34,7 +36,7 @@ void displayTask(void* parameter)
                         int16_t touchX = event.x[0];
                         int16_t touchY = event.y[0];
 
-                        for (int i = 0; i < 3; i++) {
+                        for (int i = 0; i < MENU_ITEM_COUNT; i++) {
                             MenuItem& item = menuItems[i];
                             if (touchX >= item.x && touchX < item.x + item.width &&
                                 touchY >= item.y && touchY < item.y + item.height) {
@@ -48,6 +50,34 @@ void displayTask(void* parameter)
                     if (event.finger_count == 0) {
                         menuLastTouched = false;
                     }
+                }
+
+                // ========================================
+                // コード演奏画面の処理
+                // ========================================
+                else if (screen == SCREEN_CHORD) {
+                    // 戻るボタン（情報パネル最下部の BACK: x40..160, y379..425）
+                    // いずれかの指が乗っていたらメニューへ。
+                    bool backHit = false;
+                    for (uint8_t i = 0; i < event.finger_count && i < 5; i++) {
+                        if (event.x[i] >= 40 && event.x[i] < 160 &&
+                            event.y[i] >= 379 && event.y[i] < 425) {
+                            backHit = true;
+                            break;
+                        }
+                    }
+                    if (backHit) {
+                        chordHandleTouch(event.x, event.y, 0);  // 保持中の音を止める
+                        switchScreen(SCREEN_MENU);
+                        xSemaphoreGive(displayMutex);
+                        continue;
+                    }
+
+                    // グリッド保持を先に更新（g_heldPad を確定）してから D-pad を適用。
+                    // 両者は全指走査・空間的に排他なので同時押しが成立する。
+                    chordHandleTouch(event.x, event.y, event.finger_count);
+                    chordHandleControls(event.x, event.y, event.finger_count);
+                    chordRedrawDirty();
                 }
 
                 // ========================================
@@ -101,6 +131,48 @@ void displayTask(void* parameter)
                         }
 
                         grid->redrawChangedCells();
+                    }
+                }
+
+                // ========================================
+                // 音楽プレイヤー画面の処理
+                // ========================================
+                else if (screen == SCREEN_MUSIC) {
+                    if (event.finger_count > 0 && !musicLastTouched) {
+                        int16_t touchX = event.x[0];
+                        int16_t touchY = event.y[0];
+
+                        // 戻るボタン
+                        if (touchX >= 10 && touchX < 110 && touchY >= 172 && touchY < 212) {
+                            switchScreen(SCREEN_MENU);
+                            musicLastTouched = true;
+                        }
+                        // 停止ボタン
+                        else if (musicIsPlaying && touchX >= 350 && touchX < 470 && touchY >= 5 && touchY < 27) {
+                            stopMusic();
+                            drawMusicScreen();
+                            musicLastTouched = true;
+                        }
+                        // ファイルリストのタッチ
+                        else if (touchY >= MUSIC_LIST_Y_START && touchY < 170 && touchX >= 10 && touchX < 470) {
+                            int16_t itemIndex = (touchY - MUSIC_LIST_Y_START) / MUSIC_ITEM_HEIGHT + musicScrollOffset;
+                            if (itemIndex >= 0 && itemIndex < musicFileCount) {
+                                playMusicFile(itemIndex);
+                                drawMusicFileList();
+                                // 停止ボタンも更新
+                                gfx->fillRoundRect(350, 5, 120, 22, 3, 0xF800);
+                                gfx->drawRoundRect(350, 5, 120, 22, 3, WHITE);
+                                gfx->setTextSize(1);
+                                gfx->setTextColor(WHITE);
+                                gfx->setCursor(385, 12);
+                                gfx->print("STOP");
+                            }
+                            musicLastTouched = true;
+                        }
+                    }
+
+                    if (event.finger_count == 0) {
+                        musicLastTouched = false;
                     }
                 }
 

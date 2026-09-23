@@ -5,8 +5,7 @@
 
 #include "bluetooth.h"
 #include "../screens/screens.h"
-#include <esp_bt.h>
-#include <esp_bt_main.h>
+#include <NimBLEDevice.h>
 
 // Bluetooth開始
 void startBluetooth() {
@@ -14,21 +13,20 @@ void startBluetooth() {
         Serial.println("========================================");
         Serial.println("Starting BLE-MIDI...");
 
-        esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-        if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
-            esp_bt_controller_init(&bt_cfg);
-            esp_bt_controller_enable(ESP_BT_MODE_BLE);
-            esp_bluedroid_init();
-            esp_bluedroid_enable();
-            Serial.println("BLE hardware initialized");
-        }
-
-        delay(100);
-
         BLEMIDI.setHandleConnected(onBLEConnected);
         BLEMIDI.setHandleDisconnected(onBLEDisconnected);
 
         MIDI.begin(MIDI_CHANNEL_OMNI);
+
+        // アドバタイジングデータにデバイス名を設定
+        NimBLEServer* pServer = NimBLEDevice::getServer();
+        if (pServer) {
+            NimBLEAdvertising* pAdvertising = pServer->getAdvertising();
+            pAdvertising->setName(DEVICE_NAME);
+            pAdvertising->start();
+        }
+
+        delay(100);
 
         bleAdvertising = true;
 
@@ -50,10 +48,7 @@ void stopBluetooth() {
         bleConnected = false;
         bleAdvertising = false;
 
-        esp_bluedroid_disable();
-        esp_bluedroid_deinit();
-        esp_bt_controller_disable();
-        esp_bt_controller_deinit();
+        BLEDevice::deinit(false);
 
         Serial.println("BLE-MIDI stopped completely");
         Serial.println("BLE hardware disabled");
@@ -94,17 +89,7 @@ void onBLEDisconnected() {
     bleConnected = false;
 
     if (bleAdvertising) {
-        Serial.println("Preparing for reconnection...");
-        delay(1000);
-
-        BLEMIDI.setHandleConnected(onBLEConnected);
-        BLEMIDI.setHandleDisconnected(onBLEDisconnected);
-        MIDI.begin(MIDI_CHANNEL_OMNI);
-
-        Serial.println("========================================");
-        Serial.println("Ready for reconnection");
-        Serial.println("Status: Advertising...");
-        Serial.println("========================================");
+        Serial.println("Status: Advertising (waiting for reconnection)...");
     }
 
     if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {

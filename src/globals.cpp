@@ -19,11 +19,13 @@ unsigned long lastBleStatusUpdate = 0;
 // 画面モード
 ScreenMode currentScreen = SCREEN_MENU;
 
-// メニュー項目
+// メニュー項目（MENU_ITEM_COUNT 個）
 MenuItem menuItems[] = {
-    {"Drum Pad", SCREEN_DRUMPAD, 90, 30, 300, 50},
-    {"Bluetooth", SCREEN_BLUETOOTH, 90, 90, 300, 50},
-    {"About", SCREEN_ABOUT, 90, 150, 300, 50}
+    {"Chord", SCREEN_CHORD, 90, 6, 300, 34},
+    {"Drum Pad", SCREEN_DRUMPAD, 90, 46, 300, 34},
+    {"Music", SCREEN_MUSIC, 90, 86, 300, 34},
+    {"Bluetooth", SCREEN_BLUETOOTH, 90, 126, 300, 34},
+    {"About", SCREEN_ABOUT, 90, 166, 300, 34}
 };
 
 // モード切り替えボタン
@@ -41,9 +43,17 @@ BluetoothButton bleButton = {
 // 現在のタッチモード
 TouchMode currentTouchMode = TOUCH_MODE_TOGGLE;
 
+// 音楽プレイヤー用
+char musicFiles[MUSIC_MAX_FILES][64] = {};
+int16_t musicFileCount = 0;
+int16_t musicScrollOffset = 0;
+int16_t musicSelectedIndex = -1;
+bool musicIsPlaying = false;
+
 // FreeRTOS オブジェクト
 TaskHandle_t touchTaskHandle = NULL;
 TaskHandle_t displayTaskHandle = NULL;
 TaskHandle_t clockTaskHandle = NULL;
+TaskHandle_t neotrellisTaskHandle = NULL;
 QueueHandle_t touchEventQueue = NULL;
 SemaphoreHandle_t displayMutex = NULL;

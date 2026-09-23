@@ -30,8 +30,8 @@
 #define IIS_DATA_BIT 16       // 16-bit data
 
 // WiFi Configuration
-#define WIFI_SSID "xinyuandianzi"
-#define WIFI_PASSWORD "AA15994823428"
+#define WIFI_SSID "TP-Link_8A2C"
+#define WIFI_PASSWORD "58087053"
 #define WIFI_CONNECT_WAIT_MAX (10000)
 #define ENABLE_WIFI_CONNECTION false  // WiFi接続を無効化する場合はtrueに変更
 

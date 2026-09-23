@@ -16,10 +16,10 @@
 #define SD_FILE_NAME "/music.mp3"
 
 // 替换以下信息为你的Wi-Fi网络信息
-const char *ssid = "xinyuandianzi";
-const char *password = "AA15994823428";
+const char *ssid = "TP-Link_8A2C";
+const char *password = "58087053";
 // const char *ssid = "LilyGo-AABB";
-// const char *password = "xinyuandianzi";
+// const char *password = "TP-Link_8A2C";
 
 // 文件下载链接
 // const char *fileDownloadUrl = "https://code.visualstudio.com/docs/?dv=win64user";//vscode

@@ -7,6 +7,7 @@
 #include "../screens/screens.h"
 #include "../bluetooth/bluetooth.h"
 #include "../midi/midi_handler.h"
+#include "../chord/chord_mode.h"
 
 // ディスプレイ更新タスク（画面ごとに完全分離）
 void displayTask(void* parameter)
@@ -35,7 +36,7 @@ void displayTask(void* parameter)
                         int16_t touchX = event.x[0];
                         int16_t touchY = event.y[0];
 
-                        for (int i = 0; i < 4; i++) {
+                        for (int i = 0; i < MENU_ITEM_COUNT; i++) {
                             MenuItem& item = menuItems[i];
                             if (touchX >= item.x && touchX < item.x + item.width &&
                                 touchY >= item.y && touchY < item.y + item.height) {
@@ -49,6 +50,34 @@ void displayTask(void* parameter)
                     if (event.finger_count == 0) {
                         menuLastTouched = false;
                     }
+                }
+
+                // ========================================
+                // コード演奏画面の処理
+                // ========================================
+                else if (screen == SCREEN_CHORD) {
+                    // 戻るボタン（情報パネル最下部の BACK: x40..160, y379..425）
+                    // いずれかの指が乗っていたらメニューへ。
+                    bool backHit = false;
+                    for (uint8_t i = 0; i < event.finger_count && i < 5; i++) {
+                        if (event.x[i] >= 40 && event.x[i] < 160 &&
+                            event.y[i] >= 379 && event.y[i] < 425) {
+                            backHit = true;
+                            break;
+                        }
+                    }
+                    if (backHit) {
+                        chordHandleTouch(event.x, event.y, 0);  // 保持中の音を止める
+                        switchScreen(SCREEN_MENU);
+                        xSemaphoreGive(displayMutex);
+                        continue;
+                    }
+
+                    // グリッド保持を先に更新（g_heldPad を確定）してから D-pad を適用。
+                    // 両者は全指走査・空間的に排他なので同時押しが成立する。
+                    chordHandleTouch(event.x, event.y, event.finger_count);
+                    chordHandleControls(event.x, event.y, event.finger_count);
+                    chordRedrawDirty();
                 }
 
                 // ========================================

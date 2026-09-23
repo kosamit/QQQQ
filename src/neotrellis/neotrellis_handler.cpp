@@ -5,6 +5,7 @@
 
 #include "neotrellis_handler.h"
 #include "../midi/midi_handler.h"
+#include "../chord/chord_mode.h"
 #include <Wire.h>
 
 bool neotrellisConnected = false;
@@ -32,38 +33,54 @@ void scanI2C(TwoWire& wire, const char* busName) {
     }
 }
 
+// 指定バスで NeoTrellis(seesaw) を探す。アドレス候補はジャンパで 0x2E..0x31。
+// 0x5A(touch)/0x6A(PMU) は別デバイスなので探索しない。見つかれば trellis に保持。
+static bool probeNeoTrellis(TwoWire& bus, const char* busName) {
+    const uint8_t addrs[] = { 0x2E, 0x2F, 0x30, 0x31 };
+    for (uint8_t i = 0; i < sizeof(addrs); i++) {
+        Serial.printf("Trying NeoTrellis on %s at 0x%02X... ", busName, addrs[i]);
+        trellis = new Adafruit_NeoTrellis(addrs[i], &bus);
+        if (trellis->begin()) {
+            Serial.printf("OK!\n");
+            return true;
+        }
+        Serial.printf("fail\n");
+        delete trellis;
+        trellis = nullptr;
+    }
+    return false;
+}
+
+// 副バス(GPIO43/44)を触る前に、両線がプルアップされているか(=機器が接続済み)を
+// 確認する。何も繋がっていないとフローティングで I2C スキャンがハングするため、
+// プルアップが無ければスキャンしない安全弁。
+static bool busHasPullups(uint8_t sda, uint8_t scl) {
+    pinMode(sda, INPUT);
+    pinMode(scl, INPUT);
+    delayMicroseconds(50);
+    return digitalRead(sda) == HIGH && digitalRead(scl) == HIGH;
+}
+
 bool initNeoTrellis() {
-    // Wire (SDA=5, SCL=6) は Arduino_HWIIC で既に初期化済み
-    Serial.println("=== I2C Bus Scan ===");
-    scanI2C(Wire, "Wire(5,6)");
+    // 一次バス: Wire = GPIO6/7 (P4/I2C コネクタ, touch/PMU と共有)。
+    Serial.println("=== I2C Bus Scan (Wire, GPIO6/7) ===");
+    scanI2C(Wire, "Wire(6,7)");
+    bool found = probeNeoTrellis(Wire, "Wire(6/7)");
 
-    // Wire1 (SDA=43, SCL=44) も試行
-    Wire1.begin(43, 44);
-    scanI2C(Wire1, "Wire1(43,44)");
-
-    // 両方のバスで NeoTrellis を探す
-    TwoWire* buses[] = { &Wire, &Wire1 };
-    const char* busNames[] = { "Wire", "Wire1" };
-    const uint8_t addrs[] = { 0x2E, 0x23, 0x5A };
-    bool found = false;
-
-    for (int b = 0; b < 2 && !found; b++) {
-        for (uint8_t i = 0; i < sizeof(addrs) && !found; i++) {
-            Serial.printf("Trying NeoTrellis on %s at 0x%02X... ", busNames[b], addrs[i]);
-            trellis = new Adafruit_NeoTrellis(addrs[i], buses[b]);
-            if (trellis->begin()) {
-                Serial.printf("OK!\n");
-                found = true;
-            } else {
-                Serial.printf("fail\n");
-                delete trellis;
-                trellis = nullptr;
-            }
+    // 二次バス: Wire1 = GPIO43/44 (P2/UART コネクタを独立 I2C として使用)。
+    // touch/PMU バスと分離できる利点あり。プルアップがある時だけ触る(ハング防止)。
+    if (!found) {
+        if (busHasPullups(43, 44)) {
+            Wire1.begin(43, 44);
+            Wire1.setTimeOut(50);  // フローティング時のスキャン待ちを短時間で打ち切り
+            found = probeNeoTrellis(Wire1, "Wire1(43/44)");
+        } else {
+            Serial.println("Wire1(43/44): no pull-ups (nothing connected), skip");
         }
     }
 
     if (!found) {
-        Serial.println("NeoTrellis not found on any bus/address");
+        Serial.println("NeoTrellis not found on Wire(6/7) or Wire1(43/44)");
         neotrellisConnected = false;
         return false;
     }
@@ -89,6 +106,17 @@ bool initNeoTrellis() {
 
 TrellisCallback neotrellisCallback(keyEvent evt) {
     uint8_t key = evt.bit.NUM;
+
+    // コード演奏画面：パッド番号=コードスロット番号として発音
+    if (currentScreen == SCREEN_CHORD) {
+        if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {
+            chordPadPress(key);
+        } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {
+            chordPadRelease(key);
+        }
+        return 0;
+    }
+
     int16_t row, col;
     neotrellisKeyToGrid(key, row, col);
 

@@ -19,12 +19,13 @@ unsigned long lastBleStatusUpdate = 0;
 // 画面モード
 ScreenMode currentScreen = SCREEN_MENU;
 
-// メニュー項目
+// メニュー項目（MENU_ITEM_COUNT 個）
 MenuItem menuItems[] = {
-    {"Drum Pad", SCREEN_DRUMPAD, 90, 10, 300, 40},
-    {"Music", SCREEN_MUSIC, 90, 55, 300, 40},
-    {"Bluetooth", SCREEN_BLUETOOTH, 90, 100, 300, 40},
-    {"About", SCREEN_ABOUT, 90, 145, 300, 40}
+    {"Chord", SCREEN_CHORD, 90, 6, 300, 34},
+    {"Drum Pad", SCREEN_DRUMPAD, 90, 46, 300, 34},
+    {"Music", SCREEN_MUSIC, 90, 86, 300, 34},
+    {"Bluetooth", SCREEN_BLUETOOTH, 90, 126, 300, 34},
+    {"About", SCREEN_ABOUT, 90, 166, 300, 34}
 };
 
 // モード切り替えボタン

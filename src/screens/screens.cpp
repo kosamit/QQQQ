@@ -5,6 +5,7 @@
 
 #include "screens.h"
 #include "../neotrellis/neotrellis_handler.h"
+#include "../chord/chord_mode.h"
 #include <SD.h>
 
 // モード切り替えボタンを描画
@@ -90,7 +91,7 @@ void drawMenuScreen() {
     gfx->setCursor(160, 5);
     gfx->print(DEVICE_NAME);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < MENU_ITEM_COUNT; i++) {
         MenuItem& item = menuItems[i];
 
         uint16_t color = 0x4208;
@@ -101,7 +102,7 @@ void drawMenuScreen() {
         gfx->setTextSize(2);
         gfx->setTextColor(WHITE);
         int16_t textWidth = strlen(item.label) * 12;
-        gfx->setCursor(item.x + (item.width - textWidth) / 2, item.y + 18);
+        gfx->setCursor(item.x + (item.width - textWidth) / 2, item.y + (item.height - 16) / 2);
         gfx->print(item.label);
     }
 }
@@ -370,6 +371,11 @@ void switchScreen(ScreenMode newScreen) {
         clearNeoTrellisLEDs();
     }
 
+    // CHORD 画面を離れるときは NeoTrellis LED を消灯
+    if (currentScreen == SCREEN_CHORD && newScreen != SCREEN_CHORD) {
+        clearNeoTrellisLEDs();
+    }
+
     currentScreen = newScreen;
 
     Serial.print("Switching to screen: ");
@@ -377,6 +383,10 @@ void switchScreen(ScreenMode newScreen) {
         case SCREEN_MENU:
             Serial.println("MENU");
             drawMenuScreen();
+            break;
+        case SCREEN_CHORD:
+            Serial.println("CHORD");
+            drawChordScreen();
             break;
         case SCREEN_DRUMPAD:
             Serial.println("DRUMPAD");

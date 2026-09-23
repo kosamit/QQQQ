@@ -19,11 +19,15 @@
 // 画面モード定義
 enum ScreenMode {
     SCREEN_MENU,           // メニュー画面
+    SCREEN_CHORD,          // コード演奏画面（picotofu CHORD モード）
     SCREEN_DRUMPAD,        // ドラムパッド画面
     SCREEN_MUSIC,          // 音楽プレイヤー画面
     SCREEN_BLUETOOTH,      // Bluetooth設定画面
     SCREEN_ABOUT           // About画面
 };
+
+// メニュー項目数
+#define MENU_ITEM_COUNT 5
 
 // メニュー項目定義
 struct MenuItem {

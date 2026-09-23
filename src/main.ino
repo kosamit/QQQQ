@@ -37,21 +37,21 @@ bool Skip_Current_Test = false;
 
 Audio audio(false, 3, I2S_NUM_1);
 
-Arduino_DataBus *bus = new Arduino_HWSPI(
-    LCD_DC /* DC */, LCD_CS /* CS */, LCD_SCLK /* SCK */, LCD_MOSI /* MOSI */, LCD_MISO /* MISO */);
+// T4-S3: RM690B0 AMOLED over QSPI (no DC line)
+Arduino_DataBus *bus = new Arduino_ESP32QSPI(
+    LCD_QSPI_CS /* CS */, LCD_QSPI_SCK /* SCK */,
+    LCD_QSPI_D0 /* D0 */, LCD_QSPI_D1 /* D1 */, LCD_QSPI_D2 /* D2 */, LCD_QSPI_D3 /* D3 */);
 
-Arduino_GFX *gfx = new Arduino_ST7796(
-    bus, LCD_RST /* RST */, 3 /* rotation */, true /* IPS */,
+// Native panel is portrait 450x600; rotation 1 -> landscape 600x450.
+Arduino_GFX *gfx = new Arduino_RM690B0(
+    bus, LCD_RST /* RST */, 1 /* rotation */,
     LCD_WIDTH /* width */, LCD_HEIGHT /* height */,
-    49 /* col offset 1 */, 0 /* row offset 1 */, 0 /* col_offset2 */, 0 /* row_offset2 */);
+    LCD_COL_OFFSET /* col offset 1 */, 0 /* row offset 1 */, 0 /* col offset 2 */, 0 /* row offset 2 */);
 
 std::shared_ptr<Arduino_IIC_DriveBus> IIC_Bus =
     std::make_shared<Arduino_HWIIC>(IIC_SDA, IIC_SCL, &Wire);
 
-std::shared_ptr<Arduino_IIS_DriveBus> IIS_Bus =
-    std::make_shared<Arduino_HWIIS>(I2S_NUM_0, MSM261_BCLK, MSM261_WS, MSM261_DATA);
-
-std::unique_ptr<Arduino_IIS> IIS(new Arduino_MEMS(IIS_Bus));
+// T4-S3 has no MEMS mic (MSM261) — its I2S pins collide with the display/SD, so it is omitted.
 
 std::unique_ptr<Arduino_IIC> CST226SE(new Arduino_CST2xxSE(IIC_Bus, CST226SE_DEVICE_ADDRESS,
                                                            TOUCH_RST, TOUCH_INT, Arduino_IIC_Touch_Interrupt));
@@ -59,8 +59,9 @@ std::unique_ptr<Arduino_IIC> CST226SE(new Arduino_CST2xxSE(IIC_Bus, CST226SE_DEV
 std::unique_ptr<Arduino_IIC> SY6970(new Arduino_SY6970(IIC_Bus, SY6970_DEVICE_ADDRESS,
                                                        DRIVEBUS_DEFAULT_VALUE, DRIVEBUS_DEFAULT_VALUE));
 
+// T4-S3 has no RTC — keep the object (used by the clock UI) but pass no INT pin (GPIO7 = I2C SCL).
 std::unique_ptr<Arduino_IIC> PCF85063(new Arduino_PCF85063(IIC_Bus, PCF85063_DEVICE_ADDRESS,
-                                                           DRIVEBUS_DEFAULT_VALUE, PCF85063_INT, Arduino_IIC_RTC_Interrupt));
+                                                           DRIVEBUS_DEFAULT_VALUE, DRIVEBUS_DEFAULT_VALUE, Arduino_IIC_RTC_Interrupt));
 
 // BLE-MIDI インスタンス
 BLEMIDI_CREATE_INSTANCE(DEVICE_NAME, MIDI);
@@ -87,22 +88,11 @@ void setup()
     Serial.println("[T-Display-S3-Pro-MVSRBoard_" + (String)BOARD_VERSION "][" + (String)SOFTWARE_NAME +
                    "]_firmware_" + (String)SOFTWARE_LASTEDITTIME);
 
-    pinMode(RT9080_EN, OUTPUT);
-    digitalWrite(RT9080_EN, HIGH);
-
-    pinMode(MSM261_EN, OUTPUT);
-    digitalWrite(MSM261_EN, HIGH);
-
-    pinMode(MAX98357A_SD_MODE, OUTPUT);
-    digitalWrite(MAX98357A_SD_MODE, HIGH);
-
-    ledcAttachPin(LCD_BL, 1);
-    ledcSetup(1, 2000, 8);
-    ledcWrite(1, 255);
-
-    ledcAttachPin(VIBRATINO_MOTOR_PWM, 2);
-    ledcSetup(2, 12000, 8);
-    ledcWrite(2, 0);
+    // T4-S3: enable AMOLED / PMIC power BEFORE initializing the display.
+    // (RT9080 regulator, MSM261 mic, MAX98357A amp, backlight PWM and vibration
+    //  motor from the T-Display-S3-Pro build do not exist on this board.)
+    pinMode(LCD_EN, OUTPUT);
+    digitalWrite(LCD_EN, HIGH);
 
     if (SY6970->begin() == false)
     {
@@ -157,27 +147,27 @@ void setup()
         Serial.println("CST226SE initialization successfully");
     }
 
+    // T4-S3 has no PCF85063 RTC; init is best-effort and skipped if absent.
     if (PCF85063->begin() == false)
     {
-        Serial.println("PCF85063 initialization fail");
-        delay(2000);
+        Serial.println("PCF85063 not present (no RTC on T4-S3)");
     }
     else
     {
         Serial.println("PCF85063 initialization successfully");
+
+        // 時間形式を24時間制に設定
+        PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_TIME_FORMAT,
+                                         PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_TIME_FORMAT_24);
+
+        // クロック出力を無効化
+        PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_OUTPUT_VALUE,
+                                         PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_OUTPUT_OFF);
+
+        // RTCを有効化
+        PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
+                                         PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
     }
-
-    // 時間形式を24時間制に設定
-    PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_TIME_FORMAT,
-                                     PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_TIME_FORMAT_24);
-
-    // クロック出力を無効化
-    PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_OUTPUT_VALUE,
-                                     PCF85063->Arduino_IIC_RTC::Device_Mode::RTC_CLOCK_OUTPUT_OFF);
-
-    // RTCを有効化
-    PCF85063->IIC_Write_Device_State(PCF85063->Arduino_IIC_RTC::Device::RTC_CLOCK_RTC,
-                                     PCF85063->Arduino_IIC_RTC::Device_State::RTC_DEVICE_ON);
 
     // SD カード初期化
     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
@@ -189,10 +179,9 @@ void setup()
         SD_Initialization_Flag = false;
     }
 
-    // オーディオ I2S ピン設定
-    audio.setPinout(MAX98357A_BCLK, MAX98357A_LRCLK, MAX98357A_DATA);
+    // T4-S3 has no MAX98357A amplifier (its I2S pins collide with the display/SD),
+    // so audio output is disabled. The Audio object is kept so the UI still builds.
     Volume_Value = 10;
-    audio.setVolume(Volume_Value); // 0...21、音量設定
 
     // BLE-MIDI 初期化（手動起動に変更）
     Serial.println("BLE-MIDI ready (manual start)");
@@ -232,9 +221,57 @@ void setup()
         Wifi_Connection_Flag = false;
     }
 
-    gfx->begin();
+    if (!gfx->begin()) {
+        Serial.println("gfx->begin() FAILED (RM690B0 QSPI)");
+    } else {
+        Serial.println("RM690B0 display initialized");
+    }
     gfx->setTextSize(1);
+    // Power-on self-test: flash red so a lit panel is unmistakable, then clear.
+    gfx->fillScreen(RED);
+    delay(300);
     gfx->fillScreen(BLACK);
+
+#ifdef TOUCH_TEST
+    // ================= Touch calibration test =================
+    // Shows RAW CST226SE coordinates and draws a dot where you touch,
+    // so we can work out the correct coordinate transform for the T4-S3.
+    if (CST226SE->begin() == false) {
+        Serial.println("[TOUCH_TEST] CST226SE begin FAILED");
+    }
+    Serial.println("[TOUCH_TEST] running - touch the screen");
+    Serial.printf("[TOUCH_TEST] screen size = %d x %d\n", gfx->width(), gfx->height());
+    while (true) {
+        int32_t fingers = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH_FINGER_NUMBER);
+        int32_t rx = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH1_COORDINATE_X);
+        int32_t ry = CST226SE->IIC_Read_Device_Value(CST226SE->Arduino_IIC_Touch::Value_Information::TOUCH1_COORDINATE_Y);
+
+        gfx->fillScreen(BLACK);
+        // frame + corner markers to show the drawable bounds
+        gfx->drawRect(0, 0, gfx->width(), gfx->height(), 0x001F /* blue */);
+        gfx->fillRect(0, 0, 20, 20, 0xF800);                                 // top-left = red
+        gfx->fillRect(gfx->width() - 20, 0, 20, 20, 0x07E0);                  // top-right = green
+        gfx->fillRect(0, gfx->height() - 20, 20, 20, 0xFFE0);                 // bottom-left = yellow
+
+        gfx->setTextColor(WHITE);
+        gfx->setTextSize(3);
+        gfx->setCursor(30, 30);
+        gfx->printf("Fingers: %ld", (long)fingers);
+        gfx->setCursor(30, 70);
+        gfx->printf("RAW X: %ld", (long)rx);
+        gfx->setCursor(30, 110);
+        gfx->printf("RAW Y: %ld", (long)ry);
+
+        if (fingers > 0) {
+            // draw where the RAW coords land on screen (clamped)
+            int16_t dx = rx < 0 ? 0 : (rx >= gfx->width() ? gfx->width() - 1 : rx);
+            int16_t dy = ry < 0 ? 0 : (ry >= gfx->height() ? gfx->height() - 1 : ry);
+            gfx->fillCircle(dx, dy, 12, 0x07E0);
+            Serial.printf("[TOUCH_TEST] fingers=%ld raw=(%ld,%ld)\n", (long)fingers, (long)rx, (long)ry);
+        }
+        delay(60);
+    }
+#endif
 
     // Initialize touch info
     Init_Touch_Info();
